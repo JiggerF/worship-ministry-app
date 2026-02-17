@@ -1,0 +1,9 @@
+.darkerText {
+    color: #111 !important;
+    font-weight: bold;
+  }
+
+.inputDarkPlaceholder::placeholder {
+  color: #111 !important;
+  opacity: .5;
+}
