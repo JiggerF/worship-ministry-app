@@ -45,7 +45,7 @@ export default function SongPoolPage() {
       {/* Search Bar */}
       <input
         type="text"
-        className={`${styles.inputDarkPlaceholder} w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent`}
+        className={`${styles.inputDarkText} ${styles.inputDarkPlaceholder} w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent`}
         placeholder="Search by song title or artist..."
         value={search}
         onChange={(e) => setSearch(e.target.value)}
@@ -55,11 +55,11 @@ export default function SongPoolPage() {
       <div className="flex flex-wrap gap-2">
         {/* Status Filter */}
         <select
+          className={`${styles.selectDarkText} w-full px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900`}
           value={statusFilter}
           onChange={(e) =>
             setStatusFilter(e.target.value as SongStatus | "all")
           }
-          className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900"
         >
           {STATUS_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -70,13 +70,13 @@ export default function SongPoolPage() {
 
         {/* Category Filter */}
         <select
+          className={`${styles.selectDarkText} w-full px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900`}
           value={categoryFilter}
           onChange={(e) =>
             setCategoryFilter(e.target.value as SongCategory | "all")
           }
-          className="px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900"
         >
-          <option value="all" className={`${styles.inputDarkPlaceholder}`}>All Categories</option>
+          <option value="all">All Categories</option>
           {SONG_CATEGORIES.map((cat) => (
             <option key={cat.value} value={cat.value}>
               {cat.label}
