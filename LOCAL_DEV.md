@@ -119,3 +119,34 @@ supabase start
 | Email          | Stub (logged, not sent)        | Resend               |
 | Cron jobs      | Manual trigger (API routes)    | Vercel Cron          |
 | Environment    | `.env.local`                   | Vercel env vars      |
+
+
+# POSTRESQL
+To connect to postgresql docker container
+```bash
+docker exec -it supabase_db_worship-ministry-app psql -U postgres
+```
+
+To show tables
+```bash
+\dt
+```
+To show all table data
+```bash
+\d+ public.members
+\d+ public.roles
+\d+ public.member_roles
+\d+ public.availability
+\d+ public.roster
+```
+
+To query Roles table
+```bash
+select id, name from roles order by id;
+```
+
+# Supabase Commands
+To show status
+```bash
+supabase status 
+```

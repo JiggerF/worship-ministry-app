@@ -13,9 +13,9 @@ export function RosterBadge({
   status: RosterStatus | "next" | "empty";
 }) {
   const label =
-    status === "locked"
+    status === "LOCKED"
       ? "FINAL"
-      : status === "draft"
+      : status === "DRAFT"
         ? "DRAFT"
         : status === "next"
           ? "> NEXT"

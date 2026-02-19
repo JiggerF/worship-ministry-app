@@ -1,14 +1,7 @@
-//Pseudocode Plan:
-//Create a new file: src/pages/admin/dashboard.tsx.
-//Check if the user is authenticated using Supabase Auth.
-//If not authenticated, redirect to /admin/login.
-//If authenticated, display a simple dashboard placeholder.
-//Add a "Sign Out" button to the admin dashboard.
-//On click, call supabase.auth.signOut().
-//Redirect to /admin/login after sign-out.
+"use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -34,24 +27,20 @@ export default function AdminDashboard() {
     getUser();
   }, [router]);
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.replace('/admin/login');
-  };
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
-  if (loading) return <div>Loading...</div>;
+  if (!user) {
+    // Redirecting, but return null to avoid rendering
+    return null;
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <h1 className="text-3xl font-bold mb-4">Admin Dashboard</h1>
-      <p>Welcome, {user?.email}!</p>
-      <button
-        onClick={handleSignOut}
-        className="mt-6 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-      >
-        Sign Out
-      </button>
-      {/* Add dashboard content here */}
+    <div>
+      <h1>Admin Dashboard</h1>
+      <p>Welcome, {user.email}!</p>
+      {/* Add your dashboard content here */}
     </div>
   );
 }

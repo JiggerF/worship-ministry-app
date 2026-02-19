@@ -135,3 +135,8 @@ export const MOCK_SONGS: SongWithCharts[] = [
     ],
   },
 ];
+
+export const MOCK_USER = {
+  email: "0@0.com",
+  password: "0",
+}

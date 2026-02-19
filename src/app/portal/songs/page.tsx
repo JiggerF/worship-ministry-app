@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { SongCard } from "@/components/song-card";
-import { MOCK_SONGS } from "@/lib/mock-data";
+import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
 import { SONG_CATEGORIES } from "@/lib/constants/categories";
 import type { SongStatus, SongCategory } from "@/lib/types/database";
-import styles from './styles.module.css';
+import styles from '../../styles.module.css';
 
 
 const STATUS_OPTIONS: { value: SongStatus | "all"; label: string }[] = [
@@ -21,7 +21,11 @@ export default function SongPoolPage() {
     "all"
   );
 
-  const filteredSongs = MOCK_SONGS.filter((song) => {
+  // Only use mock data in development to match roster page behaviour
+  const isDev = process.env.NODE_ENV === "development";
+  const songsSource = isDev ? MOCK_SONGS : [];
+
+  const filteredSongs = songsSource.filter((song) => {
     // Search filter
     const matchesSearch =
       search === "" ||

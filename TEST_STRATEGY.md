@@ -162,3 +162,46 @@ npm run test:all  # Runs unit + integration + E2E
 - Performance testing (Lighthouse CI for bundle size)
 - Load testing (if cron jobs scale up)
 - Contract tests with Pact for Resend email provider
+
+
+## Five Steps Implementation
+5-Step Implementation Order
+  1. Initialize Supabase Local Stack
+
+  supabase init
+  supabase start
+
+
+  Deliverables: supabase/config.toml, local Supabase running, Studio UI accessible
+
+  2. Create Environment Template
+
+  Deliverables: .env.example with:
+  - NEXT_PUBLIC_SUPABASE_URL
+  - NEXT_PUBLIC_SUPABASE_ANON_KEY
+  - SUPABASE_SERVICE_ROLE_KEY
+  - RESEND_API_KEY (placeholder)
+
+  3. Create Seed Data
+
+  Deliverables: supabase/seed.sql with:
+  - Test admin user (known credentials)
+  - 3-5 test musicians
+  - Sample roles, roster periods
+
+  4. Install Test Dependencies
+
+  npm install -D vitest @vitejs/plugin-react @testing-library/react @testing-library/jest-dom playwright @playwright/test
+
+
+  Deliverables: Updated package.json with test deps
+
+  5. Configure Test Infrastructure
+
+  Deliverables:
+  - vitest.config.ts (unit + integration)
+  - playwright.config.ts (e2e against localhost:3000)
+  - Add scripts to package.json: test:unit, test:integration, test:e2e, test:all
+  - Create __tests__/ directory structure
+  - Create e2e/ directory
+  - Write 1 smoke test per layer (unit, integration, e2e) to validate setup
