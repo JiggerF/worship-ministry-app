@@ -10,16 +10,21 @@ function isAdminLogin(pathname: string) {
 }
 
 export async function middleware(request: NextRequest) {
-  console.log("MIDDLEWARE RUNNING:", request.nextUrl.pathname);
   let response = NextResponse.next({ request });
-
-  // Debug: log incoming cookies and raw Cookie header to diagnose session propagation
-  try {
-    const all = request.cookies.getAll().map((c) => ({ name: c.name, value: c.value }));
-    console.log('MIDDLEWARE: incoming cookies ->', all);
-    console.log('MIDDLEWARE: raw Cookie header ->', request.headers.get('cookie'));
-  } catch (e) {
-    console.log('MIDDLEWARE: error reading cookies', e);
+  const isDev = process.env.NODE_ENV === "development";
+  if (isDev) {
+    console.log("MIDDLEWARE RUNNING:", request.nextUrl.pathname);
+    // Debug: log incoming cookies and raw Cookie header to diagnose session propagation
+    try {
+      const all = request.cookies.getAll().map((c) => ({ name: c.name, value: c.value }));
+      console.log('MIDDLEWARE: incoming cookies ->', all);
+      console.log('MIDDLEWARE: raw Cookie header ->', request.headers.get('cookie'));
+    } catch (e) {
+      console.log('MIDDLEWARE: error reading cookies', e);
+    }
+  } else {
+    // In production, only log route access, never sensitive data
+    console.log("MIDDLEWARE: access to", request.nextUrl.pathname);
   }
 
   // Allow a simple dev bypass when running locally with the mock auth client.
@@ -55,25 +60,27 @@ export async function middleware(request: NextRequest) {
   // Protect all /admin routes except /admin/login
   if (isAdminPath(request.nextUrl.pathname) && !isAdminLogin(request.nextUrl.pathname)) {
     const { data, error } = await supabase.auth.getUser();
-    console.log('MIDDLEWARE: supabase.auth.getUser ->', {
-      user: data?.user ?? null,
-      error: error ?? null,
-    });
+    if (isDev) {
+      console.log('MIDDLEWARE: supabase.auth.getUser ->', {
+        user: data?.user ?? null,
+        error: error ?? null,
+      });
+    }
 
     let email: string | null = null;
 
     // If getUser failed due to missing session, try a best-effort cookie fallback.
     if (error || !data?.user) {
-      console.log('MIDDLEWARE: getUser failed, attempting cookie fallback');
+      if (isDev) console.log('MIDDLEWARE: getUser failed, attempting cookie fallback');
       try {
         const sbTokenCookie = request.cookies.get('sb:token')?.value;
         if (sbTokenCookie) {
           try {
             const parsed = JSON.parse(sbTokenCookie);
             email = parsed?.user?.email ?? null;
-            console.log('MIDDLEWARE: parsed sb:token ->', { email });
+            if (isDev) console.log('MIDDLEWARE: parsed sb:token ->', { email });
           } catch (e) {
-            console.log('MIDDLEWARE: failed parsing sb:token JSON', e);
+            if (isDev) console.log('MIDDLEWARE: failed parsing sb:token JSON', e);
           }
         }
 
@@ -86,29 +93,29 @@ export async function middleware(request: NextRequest) {
               if (parts.length === 3) {
                 const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
                 email = payload?.email ?? null;
-                console.log('MIDDLEWARE: decoded sb-access-token ->', { email });
+                if (isDev) console.log('MIDDLEWARE: decoded sb-access-token ->', { email });
               }
             } catch (e) {
-              console.log('MIDDLEWARE: failed decoding sb-access-token', e);
+              if (isDev) console.log('MIDDLEWARE: failed decoding sb-access-token', e);
             }
           }
         }
       } catch (e) {
-        console.log('MIDDLEWARE: cookie fallback error', e);
+        if (isDev) console.log('MIDDLEWARE: cookie fallback error', e);
       }
 
       if (!email) {
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/admin/login";
         loginUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
-        console.log('MIDDLEWARE: redirecting to /admin/login (not logged in)');
+        if (isDev) console.log('MIDDLEWARE: redirecting to /admin/login (not logged in)');
         return NextResponse.redirect(loginUrl);
       }
 
       // Use service role key for server-side member lookup to avoid auth restrictions.
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!serviceKey) {
-        console.log('MIDDLEWARE: SUPABASE_SERVICE_ROLE_KEY not set; denying access');
+        if (isDev) console.log('MIDDLEWARE: SUPABASE_SERVICE_ROLE_KEY not set; denying access');
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = "/admin/login";
         loginUrl.searchParams.set("reason", "no_service_key");
@@ -125,7 +132,7 @@ export async function middleware(request: NextRequest) {
 
         if (!res.ok) {
           const text = await res.text();
-          console.log('MIDDLEWARE: members fetch failed ->', res.status, text);
+          if (isDev) console.log('MIDDLEWARE: members fetch failed ->', res.status, text);
           const loginUrl = request.nextUrl.clone();
           loginUrl.pathname = '/admin/login';
           loginUrl.searchParams.set('reason', 'not_admin');
@@ -134,7 +141,7 @@ export async function middleware(request: NextRequest) {
 
         const members = await res.json();
         const member = Array.isArray(members) ? members[0] ?? null : members;
-        console.log('MIDDLEWARE: members fetch (fallback) ->', { member });
+        if (isDev) console.log('MIDDLEWARE: members fetch (fallback) ->', { member });
 
         if (!member || member.is_active !== true || member.app_role !== 'Admin') {
           const loginUrl = request.nextUrl.clone();
@@ -146,7 +153,7 @@ export async function middleware(request: NextRequest) {
         // Passed fallback check — allow through
         return response;
       } catch (e) {
-        console.log('MIDDLEWARE: members fetch error', e);
+        if (isDev) console.log('MIDDLEWARE: members fetch error', e);
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = '/admin/login';
         loginUrl.searchParams.set('reason', 'not_admin');
@@ -169,7 +176,7 @@ export async function middleware(request: NextRequest) {
       .eq("email", email)
       .single();
 
-    console.log('MIDDLEWARE: members query ->', { member: member ?? null, memberErr: memberErr ?? null });
+    if (isDev) console.log('MIDDLEWARE: members query ->', { member: member ?? null, memberErr: memberErr ?? null });
 
     if (
       memberErr ||
