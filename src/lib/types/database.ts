@@ -12,7 +12,7 @@ export type RosterStatus = "DRAFT" | "LOCKED";
 
 export type AvailabilityStatus = "AVAILABLE" | "UNAVAILABLE";
 
-export type SongStatus = "approved" | "new_song_learning";
+export type SongStatus = "learning" | "internal_approved" | "published";
 
 export type SongCategory =
   | "assurance_of_grace"

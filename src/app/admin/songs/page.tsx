@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { SongStatusBadge } from "@/components/status-badge";
 // using native table markup directly (avoid nested table wrapper)
 import { Pagination } from "@/components/ui/Pagination";
 
@@ -24,9 +24,9 @@ const CATEGORIES = [
   "thanksgiving",
 ];
 
-const STATUSES = ["All Statuses", "approved", "new_song_learning"] as const;
+const STATUSES = ["All Statuses", "learning", "in_review", "published"] as const;
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 20;
 
 export default function AdminSongsPage() {
   const useMock = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
@@ -74,7 +74,9 @@ export default function AdminSongsPage() {
         q === "" || s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q);
       const matchesCategory =
         filterCategory === CATEGORIES[0] || (s.categories ?? []).includes(filterCategory as any);
-      const matchesStatus = filterStatus === STATUSES[0] || s.status === filterStatus;
+      // normalize legacy status values (internal_approved -> in_review) for UI filtering
+      const songStatus = s.status === "internal_approved" ? "in_review" : s.status;
+      const matchesStatus = filterStatus === STATUSES[0] || songStatus === filterStatus;
       return matchesQuery && matchesCategory && matchesStatus;
     });
   }, [songs, searchQuery, filterCategory, filterStatus]);
@@ -118,7 +120,7 @@ export default function AdminSongsPage() {
           id: Date.now().toString(),
           title: payload.title ?? "Untitled",
           artist: payload.artist ?? null,
-          status: payload.status ?? "approved",
+          status: payload.status ?? "published",
           categories: payload.categories ?? null,
           youtube_url: payload.youtube_url ?? null,
           scripture_anchor: payload.scripture_anchor ?? null,
@@ -242,9 +244,18 @@ export default function AdminSongsPage() {
             </div>
             </div>
 
-            <div className="ml-1 text-sm text-gray-700">Showing {filtered.length} of {songs.length} songs</div>
+          <div className="flex items-center justify-between mt-3">
+            <div className="text-sm text-gray-700">
+              Showing <span className="font-medium text-gray-900">{paginated.length}</span> of <span className="font-medium text-gray-900">{filtered.length}</span> song{filtered.length !== 1 ? "s" : ""}
+              {songs.length !== filtered.length ? ` (filtered from ${songs.length})` : ""}
+              {totalPages > 1 ? ` · Page ${currentPage} of ${totalPages}` : ""}
+            </div>
+            {totalPages > 1 && (
+              <Pagination className="" page={currentPage} total={totalPages} onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))} onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} />
+            )}
+          </div>
 
-          <div className="mt-4">
+          <div className="mt-3">
             <div className="relative w-full overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -267,7 +278,7 @@ export default function AdminSongsPage() {
                       <tr key={song.id} className="border-t">
                         <td className="px-3 py-3 font-medium text-gray-800">{song.title}</td>
                         <td className="px-3 py-3 text-gray-800">{song.artist ?? "—"}</td>
-                        <td className="px-3 py-3"><Badge>{song.status === 'approved' ? 'Approved' : 'Learning'}</Badge></td>
+                        <td className="px-3 py-3"><SongStatusBadge status={song.status} /></td>
                         <td className="px-3 py-3 text-gray-800">{(song.chord_charts || []).map((c) => c.key).join(", ") || "—"}</td>
                         <td className="px-3 py-3 text-gray-800">{song.scripture_anchor ?? "—"}</td>
                         <td className="px-3 py-3 text-gray-800">{song.youtube_url ? (
@@ -294,10 +305,12 @@ export default function AdminSongsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between mt-4">
-            <div className="text-sm text-gray-600">Showing {paginated.length} of {filtered.length}</div>
-            <Pagination page={currentPage} total={totalPages} onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))} onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} />
-          </div>
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-center">
+              <Pagination page={currentPage} total={totalPages} onPrev={() => setCurrentPage((p) => Math.max(1, p - 1))} onNext={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} className="" />
+            </div>
+          )}
+
         </Card>
       </div>
 
@@ -336,7 +349,8 @@ export default function AdminSongsPage() {
 function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts | null; isSaving: boolean; onCancel: () => void; onSave: (p: Partial<SongWithCharts>) => void }) {
   const [title, setTitle] = useState(song?.title ?? "");
   const [artist, setArtist] = useState(song?.artist ?? "");
-  const [status, setStatus] = useState<SongWithCharts["status"]>(song?.status ?? "approved");
+  const initialStatus = song?.status === "internal_approved" ? "in_review" : song?.status ?? "published";
+  const [status, setStatus] = useState<SongWithCharts["status"]>(initialStatus as SongWithCharts["status"]);
   const [category, setCategory] = useState<string>((song?.categories && song.categories[0]) ?? "assurance_of_grace");
   const [scripture, setScripture] = useState<string>(song?.scripture_anchor ?? "");
   const [youtube, setYoutube] = useState<string>(song?.youtube_url ?? "");
@@ -360,8 +374,9 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
         <div>
           <label className="block text-sm mb-1 text-gray-800">Status</label>
           <select className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800" value={status} onChange={(e) => setStatus(e.target.value as any)}>
-            <option value="approved">approved</option>
-            <option value="new_song_learning">new_song_learning</option>
+            <option value="learning">New Song – Learning</option>
+            <option value="in_review">In Review</option>
+            <option value="published">Published</option>
           </select>
         </div>
         <div>

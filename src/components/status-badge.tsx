@@ -33,21 +33,23 @@ export function RosterBadge({
 }
 
 const SONG_STATUS_STYLES: Record<SongStatus, string> = {
-  approved: "bg-green-600 text-white",
-  new_song_learning: "bg-yellow-500 text-white",
+  published: "bg-green-600 text-white",
+  learning: "bg-orange-500 text-white",
+  internal_approved: "bg-blue-200 text-blue-800",
 };
 
 const SONG_STATUS_LABELS: Record<SongStatus, string> = {
-  approved: "Approved",
-  new_song_learning: "New Song – Learning",
+  published: "Published",
+  learning: "New Song – Learning",
+  internal_approved: "In Review",
 };
 
 export function SongStatusBadge({ status }: { status: SongStatus }) {
+  const style = SONG_STATUS_STYLES[status] ?? "bg-gray-300 text-gray-700";
+  const label = SONG_STATUS_LABELS[status] ?? status;
   return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${SONG_STATUS_STYLES[status]}`}
-    >
-      {SONG_STATUS_LABELS[status]}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${style}`}>
+      {label}
     </span>
   );
 }

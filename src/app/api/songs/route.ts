@@ -10,12 +10,19 @@ if (!serviceKey) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY.");
 const supabase = createClient(supabaseUrl, serviceKey);
 
 export async function GET(req: NextRequest) {
-  // Return songs joined with chord_charts
-  const { data, error } = await supabase
+  // ?scope=portal hides internal_approved songs from the member-facing portal
+  const scope = req.nextUrl.searchParams.get("scope");
+
+  let query = supabase
     .from("songs")
     .select(`*, chord_charts(*)`)
     .order("title", { ascending: true });
 
+  if (scope === "portal") {
+    query = query.neq("status", "internal_approved");
+  }
+
+  const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data ?? []);
 }
@@ -27,7 +34,7 @@ export async function POST(req: NextRequest) {
   const songPayload = {
     title: body.title,
     artist: body.artist ?? null,
-    status: body.status ?? "approved",
+    status: body.status ?? "published",
     categories: body.categories ?? null,
     youtube_url: body.youtube_url ?? null,
     scripture_anchor: body.scripture_anchor ?? null,
