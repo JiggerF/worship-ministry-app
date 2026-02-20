@@ -121,11 +121,18 @@ async function getMemberRoles(memberId: string) {
 /* GET                           */
 /* ----------------------------- */
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { token: string } }
-) {
-  const token = params.token;
+function extractTokenFromContext(context: any) {
+  const p = context?.params;
+  if (!p) return undefined;
+  if (typeof p.then === "function") {
+    // params is a Promise
+    return p.then((resolved: any) => resolved?.token);
+  }
+  return p.token;
+}
+
+export async function GET(req: NextRequest, context: any) {
+  const token = await extractTokenFromContext(context);
   const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   if (!targetMonth) {
@@ -201,11 +208,8 @@ export async function GET(
 /* POST                          */
 /* ----------------------------- */
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { token: string } }
-) {
-  const token = params.token;
+export async function POST(req: NextRequest, context: any) {
+  const token = await extractTokenFromContext(context);
   const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   if (!targetMonth) {

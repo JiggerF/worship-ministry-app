@@ -21,16 +21,41 @@ export default function AdminLoginPage() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const res = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     setLoading(false);
 
-    if (error) {
-      setError(error.message);
+    if (res.error) {
+      setError(res.error.message);
       return;
+    }
+
+    // Persist tokens into cookies so the server-side middleware (createServerClient)
+    // can read the session on subsequent requests. This is a testing-friendly
+    // approach — in production you should set secure, httpOnly cookies from the
+    // server after exchanging credentials.
+    try {
+      const session = (res.data && (res.data as any).session) || null;
+      if (session && typeof document !== "undefined") {
+        const access = session.access_token;
+        const refresh = session.refresh_token;
+        // Keep simple cookie flags for local testing
+        document.cookie = `sb-access-token=${access}; path=/`;
+        document.cookie = `sb-refresh-token=${refresh}; path=/`;
+        // Also set the serialized session cookie `sb:token` which the
+        // server-side `createServerClient` expects to reconstruct the session.
+        try {
+          const serialized = encodeURIComponent(JSON.stringify(session));
+          document.cookie = `sb:token=${serialized}; path=/`;
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (e) {
+      // ignore cookie set errors
     }
 
     // Ensure middleware + SSR re-evaluate auth state

@@ -1,18 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMember, updateMember, deleteMember } from "@/lib/db/members";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const member = await getMember(params.id);
+function extractIdFromContext(context: any) {
+  const p = context?.params;
+  if (!p) return undefined;
+  if (typeof p.then === "function") {
+    return p.then((resolved: any) => resolved?.id);
+  }
+  return p.id;
+}
+
+export async function GET(req: NextRequest, context: any) {
+  const id = await extractIdFromContext(context);
+  const member = await getMember(id);
   return NextResponse.json(member);
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, context: any) {
+  const id = await extractIdFromContext(context);
   const data = await req.json();
-  const member = await updateMember(params.id, data);
+  const member = await updateMember(id, data);
   return NextResponse.json(member);
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  await deleteMember(params.id);
+export async function DELETE(req: NextRequest, context: any) {
+  const id = await extractIdFromContext(context);
+  await deleteMember(id);
   return NextResponse.json({ success: true });
 }

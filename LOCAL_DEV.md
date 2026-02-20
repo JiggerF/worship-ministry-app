@@ -131,6 +131,10 @@ To show tables
 ```bash
 \dt
 ```
+Disable Pager first before query table
+```bash
+\pset pager off
+```
 To show all table data
 ```bash
 \d+ public.members
@@ -140,13 +144,51 @@ To show all table data
 \d+ public.roster
 ```
 
-To query Roles table
+To query members row
 ```bash
-select id, name from roles order by id;
+SELECT id, name, email, app_role, is_active, created_at
+FROM public.members
+WHERE email = 'YOUR_EMAIL_HERE';
 ```
+TO query auth.users -> if 0 results, need to create auth users from 
+1. Studio  http://localhost:54323
+2. Left nav → Auth → Users → New user
+```bash
+postgres=> SELECT id, email, raw_app_meta_data, created_at
+FROM auth.users
+WHERE email = 'YOUR_EMAIL_HERE';
+```
+
+## Start for development
+
+Use these steps to start the full local stack and app for day-to-day development.
+
+1. Start Supabase local services (Postgres, Auth, Studio):
+
+```bash
+supabase start
+```
+
+2. Ensure `.env.local` contains the local values printed by `supabase status` (anon key, service role key, and local URLs).
+
+3. Start Next.js in development mode (fast refresh + client mocks):
+
+```bash
+cd /Users/jiggerfantonial/src/worship-ministry-app
+npm install      # if not already installed
+npm run dev
+# Open http://localhost:3000
+```
+
+Notes:
+- Use `NEXT_PUBLIC_USE_MOCK_ROSTER=true` during UI work to inject mock roster data client-side.
+- Local auth magic links are logged in the terminal and visible in Studio → Auth → Logs.
+
 
 # Supabase Commands
 To show status
 ```bash
 supabase status 
 ```
+To create admin user for testing integration:
+scripts/README.md

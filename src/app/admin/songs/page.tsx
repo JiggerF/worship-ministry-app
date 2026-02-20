@@ -53,7 +53,7 @@ export default function AdminSongsPage() {
         if (!cancelled) setSongs(data);
       } catch (err) {
         console.warn('Could not load /api/songs, keeping local state.', err);
-        if (isDev) setSongs(MOCK_SONGS);
+        if (process.env.NODE_ENV === 'development') setSongs(MOCK_SONGS);
       }
     }
     load();

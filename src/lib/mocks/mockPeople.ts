@@ -34,4 +34,23 @@ export const INITIAL_MEMBERS: MemberWithRoles[] = [
     created_at: "",
     roles: ["acoustic_guitar", "keyboard", "drums"],
   },
+  {
+    id: "admin1",
+    name: "Admin User",
+    // Use the canonical dev admin email so mock auth recognizes it.
+    email: "admin@wcc.org",
+    phone: null,
+    app_role: "Admin",
+    magic_token: "admin-token-001",
+    is_active: true,
+    created_at: "",
+    roles: [],
+  },
 ];
+
+// Simple dev credentials used by the mock auth client. Can be overridden
+// by setting NEXT_PUBLIC_DEV_PASSWORD in .env.local for convenience.
+export const DEV_ADMIN = {
+  email: "0@0.com",
+  password: process.env.NEXT_PUBLIC_DEV_PASSWORD || "0",
+};

@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, Suspense } from "react";
+
+export const dynamic = "force-dynamic";
 import { useSearchParams } from "next/navigation";
 import { ROLES } from "@/lib/constants/roles";
 import { getSundaysInMonth, formatDateDMY } from "@/lib/utils/dates";
@@ -43,8 +45,7 @@ function toISODate(date: Date): string {
 }
 
 export default function AvailabilityPage() {
-  const searchParams = useSearchParams();
-  const token = searchParams.get("token");
+  const token = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -261,8 +262,15 @@ export default function AvailabilityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
-      <div className="max-w-md w-full">
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          Loading...
+        </div>
+      }
+    >
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
+        <div className="max-w-md w-full">
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-4xl mb-2">📅</div>
@@ -357,7 +365,8 @@ export default function AvailabilityPage() {
             Submit Availability
           </button>
         </form>
+        </div>
       </div>
-    </div>
+    </Suspense>
   );
 }

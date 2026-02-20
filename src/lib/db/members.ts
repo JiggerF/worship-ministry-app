@@ -90,3 +90,75 @@ export async function upsertAvailability(
 
   return { ok: true };
 }
+
+/* -------------------------------------------------------------------------- */
+/* Compatibility wrappers expected by API route files                         */
+/* -------------------------------------------------------------------------- */
+
+// List all members (lightweight shape). Roles are returned as an empty
+// array here unless your DB stores them in a join table — adjust if needed.
+export async function getMembers() {
+  const { data, error } = await supabase
+    .from("members")
+    .select("id, name, email, phone, app_role, magic_token, is_active, created_at");
+
+  if (error) throw error;
+
+  return (data ?? []).map((row: any) => ({ ...row, roles: row.roles ?? [] }));
+}
+
+export async function createMember(payload: Partial<any>) {
+  const { data, error } = await supabase
+    .from("members")
+    .insert({ ...payload })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { ...data, roles: (data as any).roles ?? [] };
+}
+
+export async function getMember(id: string) {
+  const { data, error } = await supabase
+    .from("members")
+    .select("id, name, email, phone, app_role, magic_token, is_active, created_at")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+  return { ...data, roles: (data as any).roles ?? [] };
+}
+
+export async function getMemberByEmail(email: string) {
+  const { data, error } = await supabase
+    .from("members")
+    .select("id, name, email, phone, app_role, magic_token, is_active, created_at")
+    .eq("email", email)
+    .single();
+
+  if (error) throw error;
+  return { ...data, roles: (data as any).roles ?? [] };
+}
+
+export async function updateMember(id: string, changes: Partial<any>) {
+  const { data, error } = await supabase
+    .from("members")
+    .update({ ...changes })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { ...data, roles: (data as any).roles ?? [] };
+}
+
+export async function deleteMember(id: string) {
+  const { error } = await supabase.from("members").delete().eq("id", id);
+  if (error) throw error;
+  return { ok: true };
+}
+
+// Export a generateMagicToken alias expected by route code
+export async function generateMagicToken(memberId: string) {
+  return regenerateMagicToken(memberId);
+}

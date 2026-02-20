@@ -6,6 +6,9 @@ import { mockSupabase } from './mockClient';
 // This matches the user's request to flip to mock when NODE_ENV === 'development'.
 const isDev = process.env.NODE_ENV === 'development';
 
-export const supabase = isDev ? (mockSupabase as unknown) : realSupabase;
+// Export as `any` to allow the mock client shape during development while keeping
+// a usable supabase API surface in the rest of the app. This avoids TS errors
+// during production builds where the mock is not used.
+export const supabase: any = isDev ? (mockSupabase as any) : realSupabase;
 
 export default supabase;

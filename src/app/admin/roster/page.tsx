@@ -95,7 +95,7 @@ export default function AdminRosterPage() {
             // Normalize role shape: server mock may send a string like 'worship_lead',
             // while real DB rows include a role object { id, name } under the alias.
             role: typeof a.role === "string"
-              ? { id: ROLE_ID_MAP[a.role as any], name: a.role }
+              ? { id: ROLE_ID_MAP[a.role as MemberRole], name: a.role }
               : a.role,
             status: a.status,
             assigned_by: null,
@@ -106,7 +106,7 @@ export default function AdminRosterPage() {
 
       const status: RosterStatus | "EMPTY" = assignments.length === 0
         ? "EMPTY"
-        : assignments.every((a) => a.status === "LOCKED")
+        : assignments.every((a: any) => a.status === "LOCKED")
           ? "LOCKED"
           : "DRAFT";
 
@@ -135,20 +135,20 @@ export default function AdminRosterPage() {
           .map((a) => ({
             id: a.id,
             date: a.date,
-            role_id: ROLE_ID_MAP[a.role],
+            role_id: ROLE_ID_MAP[a.role as MemberRole],
             member_id: a.member?.id ?? null,
             status: a.status,
             assigned_by: null,
             assigned_at: new Date().toISOString(),
             locked_at: null,
-            role: { id: ROLE_ID_MAP[a.role], name: a.role },
+            role: { id: ROLE_ID_MAP[a.role as MemberRole], name: a.role },
             member: a.member ?? undefined,
           }));
 
-        const dayStatus: RosterStatus | "EMPTY" =
+          const dayStatus: RosterStatus | "EMPTY" =
           dayAssignments.length === 0
             ? "EMPTY"
-            : dayAssignments.every((a) => a.status === "LOCKED")
+            : dayAssignments.every((a: any) => a.status === "LOCKED")
               ? "LOCKED"
               : "DRAFT";
 
