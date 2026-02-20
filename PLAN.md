@@ -6,6 +6,7 @@ A scheduling and resource management app for the WCC worship ministry team. Auto
 
 ## Tech Stack
 
+
 | Layer          | Technology                                      |
 |----------------|------------------------------------------------|
 | Framework      | Next.js 16 (App Router, TypeScript)             |
