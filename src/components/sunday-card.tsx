@@ -8,11 +8,20 @@ export type SundayCardAssignment = {
   member: { id: string; name: string } | null;
 };
 
+export type SetlistItem = {
+  id?: string;
+  position?: number;
+  song?: {
+    title: string;
+    chord_charts?: Array<{ key: string }>;
+  };
+};
+
 export type SundayCardRoster = {
   date: string; // YYYY-MM-DD
   status: RosterStatus | "EMPTY";
   assignments: SundayCardAssignment[];
-  setlist: any[];
+  setlist: SetlistItem[];
   notes: string | null;
 };
 
@@ -61,7 +70,7 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
           <p className="text-lg font-semibold text-gray-900">
             {formatDayName(roster.date)}
           </p>
-          <p className={`${styles.darkerText} text-base mt-0.5`}>
+          <p className={`${styles.darkerText} text-xl font-bold mt-0.5`}>
             {formatShortDate(roster.date)}
           </p>
         </div>
@@ -127,7 +136,7 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
           </h3>
           {setlist.length > 0 ? (
             <ol className="space-y-1">
-              {setlist.map((item: any, i: number) => (
+              {setlist.map((item: SetlistItem, i: number) => (
                 <li key={item.id ?? i} className="text-sm text-gray-800">
                   {item.position ?? i + 1}. {item.song?.title ?? "Unknown"}{" "}
                   {item.song?.chord_charts?.[0]?.key

@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
     // approach — in production you should set secure, httpOnly cookies from the
     // server after exchanging credentials.
     try {
-      const session = (res.data && (res.data as any).session) || null;
+      const session = (res.data && res.data.session) || null;
       if (session && typeof document !== "undefined") {
         const access = session.access_token;
         const refresh = session.refresh_token;
@@ -50,11 +50,11 @@ export default function AdminLoginPage() {
         try {
           const serialized = encodeURIComponent(JSON.stringify(session));
           document.cookie = `sb:token=${serialized}; path=/`;
-        } catch (e) {
+        } catch {
           // ignore
         }
       }
-    } catch (e) {
+    } catch {
       // ignore cookie set errors
     }
 

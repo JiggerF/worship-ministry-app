@@ -8,8 +8,14 @@ type DevAssignment = {
   member: { id: string; name: string } | null;
 };
 
+type SetlistItem = {
+  id: string;
+  position: number;
+  song: { title: string; chord_charts: Array<{ key: string }> };
+};
+
 export function makeDevRoster(sundaysIso: string[], lockedDates: string[] = []) {
-  const devSet: Record<string, any[]> = {};
+  const devSet: Record<string, SetlistItem[]> = {};
 
   const songPool = [
     { title: "Amazing Grace", key: "G" },

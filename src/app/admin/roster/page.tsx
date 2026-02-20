@@ -5,7 +5,7 @@ import { ROSTER_COLUMN_ORDER, ROLE_LABEL_MAP, ROLES } from "@/lib/constants/role
 import { formatSundayDate, getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import { RosterBadge } from "@/components/status-badge";
 import makeDevRoster from "@/lib/mocks/devRoster";
-import type { MemberRole, RosterStatus, SundayRoster } from "@/lib/types/database";
+import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles } from "@/lib/types/database";
 
 const ROLE_ID_MAP: Record<MemberRole, number> = Object.fromEntries(
   ROLES.map((r, i) => [r.value, i + 1])
@@ -38,6 +38,7 @@ function monthToNumber(yearMonth: string) {
 export default function AdminRosterPage() {
   const [activeMonth, setActiveMonth] = useState(getCurrentMonth);
   const [roster, setRoster] = useState<SundayRoster[]>([]);
+  const [membersList, setMembersList] = useState<MemberWithRoles[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [finalising, setFinalising] = useState(false);
@@ -164,8 +165,20 @@ export default function AdminRosterPage() {
     setLoading(false);
   }
 
+    async function loadMembers() {
+      try {
+        const res = await fetch('/api/members');
+        if (!res.ok) throw new Error('Failed to load members');
+        const data = await res.json();
+        if (Array.isArray(data)) setMembersList(data as MemberWithRoles[]);
+      } catch (e) {
+        console.warn('Could not load members for roster selects', e);
+        setMembersList([]);
+      }
+    }
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadRoster(); }, [activeMonth]);
+  useEffect(() => { loadRoster(); loadMembers(); }, [activeMonth]);
 
   /* ----------------------------- */
   /* Derived State                 */
@@ -193,7 +206,7 @@ export default function AdminRosterPage() {
       sunday.assignments.map((a) => ({
         member_id: a.member_id,
         date: a.date,
-        role: a.role,
+        role_id: (a as any).role?.id ?? ROLE_ID_MAP[((a as any).role?.name) as MemberRole],
       }))
     );
 
@@ -382,23 +395,81 @@ export default function AdminRosterPage() {
             <tbody>
               {roster.map((sunday) => (
                 <tr key={sunday.date} className="border-b hover:bg-gray-50 transition-colors">
-                  <td className="px-3 py-3 font-medium text-gray-900">
-                    {formatSundayDate(sunday.date)}
+                    <td className="px-3 py-3 font-medium text-gray-900">
+                    {new Date(sunday.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </td>
 
                   {ROSTER_COLUMN_ORDER.map((role) => {
                     const assignment = sunday.assignments.find(
                       (a) => a.role.name === role
                     );
+                    // lock all fields when the month is locked
+                    const lockedForMonth = monthIsLocked;
+                    // Only show members who have this role (instrument)
+                    const candidates = membersList.filter((m) => m.roles?.includes(role as MemberRole));
 
                     return (
                       <td key={role} className="px-2 py-2">
-                        {assignment ? (
+                        { (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
                           <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                            {assignment.member?.name ?? "—"}
+                            {assignment?.member?.name ?? "—"}
                           </span>
                         ) : (
-                          <span className="text-gray-400 text-xs">—</span>
+                          <select
+                            aria-label={`Assign ${ROLE_LABEL_MAP[role]}`}
+                            value={assignment?.member_id ?? ""}
+                            onChange={(e) => {
+                              const memberId = e.target.value || null;
+                              const memberFull = candidates.find((m) => m.id === memberId) || undefined;
+                              const member = memberFull ? { id: memberFull.id, name: memberFull.name } : undefined;
+
+                              setRoster((prev) =>
+                                prev.map((s) => {
+                                  if (s.date !== sunday.date) return s;
+
+                                  const existingIdx = s.assignments.findIndex((a) => a.role.name === role);
+
+                                  if (existingIdx >= 0) {
+                                    const updated = s.assignments.map((a) => {
+                                      if (a.role.name !== role) return a;
+
+                                      const newStatus: RosterStatus = a.status === 'LOCKED' ? 'LOCKED' : 'DRAFT';
+
+                                      return {
+                                        ...a,
+                                        member_id: memberId,
+                                        member,
+                                        status: newStatus,
+                                      };
+                                    });
+                                    return { ...s, assignments: updated };
+                                  }
+
+                                  // create a new assignment for this role (client-side draft)
+                                  const newAssignment: any = {
+                                    id: "",
+                                    role_id: ROLE_ID_MAP[role as MemberRole],
+                                    member_id: memberId,
+                                    date: s.date,
+                                    role: { id: ROLE_ID_MAP[role as MemberRole], name: role },
+                                    status: 'DRAFT' as RosterStatus,
+                                    assigned_by: null,
+                                    assigned_at: new Date().toISOString(),
+                                    locked_at: null,
+                                    member,
+                                  };
+
+                                  return { ...s, assignments: [...s.assignments, newAssignment] };
+                                })
+                              );
+                            }}
+                            className="w-full text-sm border border-gray-300 text-gray-800 bg-white rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-200"
+                          >
+                            <option value="">— Unassigned —</option>
+                            {candidates.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
+                            ))}
+                          </select>
                         )}
                       </td>
                     );

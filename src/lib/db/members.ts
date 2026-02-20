@@ -16,6 +16,41 @@ if (!serviceKey) {
 
 const supabase = createClient(supabaseUrl, serviceKey);
 
+// ─────────────────────────────────────────────
+// Role assignment helpers
+// ─────────────────────────────────────────────
+
+async function getRoleIds(roleNames: string[]): Promise<number[]> {
+  if (roleNames.length === 0) return [];
+  const { data, error } = await supabase
+    .from("roles")
+    .select("id, name")
+    .in("name", roleNames);
+  if (error) throw error;
+  return (data ?? []).map((r: any) => r.id as number);
+}
+
+async function saveRoleAssignments(memberId: string, roleNames: string[]) {
+  const { error: delErr } = await supabase
+    .from("member_role_assignments")
+    .delete()
+    .eq("member_id", memberId);
+  if (delErr) throw delErr;
+
+  if (roleNames.length === 0) return;
+
+  const roleIds = await getRoleIds(roleNames);
+  if (roleIds.length === 0) return;
+
+  const assignments = roleIds.map((role_id) => ({ member_id: memberId, role_id }));
+  const { error } = await supabase.from("member_role_assignments").insert(assignments);
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────
+// Member queries
+// ─────────────────────────────────────────────
+
 /**
  * Regenerate magic token (lifetime token model)
  */
@@ -91,42 +126,72 @@ export async function upsertAvailability(
   return { ok: true };
 }
 
-/* -------------------------------------------------------------------------- */
-/* Compatibility wrappers expected by API route files                         */
-/* -------------------------------------------------------------------------- */
+// ─────────────────────────────────────────────
+// CRUD — used by API routes
+// ─────────────────────────────────────────────
 
-// List all members (lightweight shape). Roles are returned as an empty
-// array here unless your DB stores them in a join table — adjust if needed.
+function extractRoles(row: any): string[] {
+  return (row.member_role_assignments ?? [])
+    .map((a: any) => a.roles?.name)
+    .filter(Boolean);
+}
+
 export async function getMembers() {
   const { data, error } = await supabase
     .from("members")
-    .select("id, name, email, phone, app_role, magic_token, is_active, created_at");
+    .select(
+      "id, name, email, phone, app_role, magic_token, is_active, created_at, member_role_assignments(roles(name))"
+    )
+    .order("name", { ascending: true });
 
   if (error) throw error;
 
-  return (data ?? []).map((row: any) => ({ ...row, roles: row.roles ?? [] }));
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    app_role: row.app_role,
+    magic_token: row.magic_token,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    roles: extractRoles(row),
+  }));
 }
 
 export async function createMember(payload: Partial<any>) {
+  const { roles: roleNames, ...memberData } = payload;
+
   const { data, error } = await supabase
     .from("members")
-    .insert({ ...payload })
+    .insert({
+      ...memberData,
+      magic_token: memberData.magic_token ?? randomUUID(),
+    })
     .select()
     .single();
 
   if (error) throw error;
-  return { ...data, roles: (data as any).roles ?? [] };
+
+  const member = data as any;
+  if (Array.isArray(roleNames) && roleNames.length > 0) {
+    await saveRoleAssignments(member.id, roleNames);
+  }
+
+  return { ...member, roles: roleNames ?? [] };
 }
 
 export async function getMember(id: string) {
   const { data, error } = await supabase
     .from("members")
-    .select("id, name, email, phone, app_role, magic_token, is_active, created_at")
+    .select(
+      "id, name, email, phone, app_role, magic_token, is_active, created_at, member_role_assignments(roles(name))"
+    )
     .eq("id", id)
     .single();
 
   if (error) throw error;
-  return { ...data, roles: (data as any).roles ?? [] };
+  return { ...(data as any), roles: extractRoles(data) };
 }
 
 export async function getMemberByEmail(email: string) {
@@ -137,19 +202,26 @@ export async function getMemberByEmail(email: string) {
     .single();
 
   if (error) throw error;
-  return { ...data, roles: (data as any).roles ?? [] };
+  return { ...(data as any), roles: [] };
 }
 
 export async function updateMember(id: string, changes: Partial<any>) {
+  const { roles: roleNames, ...memberData } = changes;
+
   const { data, error } = await supabase
     .from("members")
-    .update({ ...changes })
+    .update({ ...memberData })
     .eq("id", id)
     .select()
     .single();
 
   if (error) throw error;
-  return { ...data, roles: (data as any).roles ?? [] };
+
+  if (Array.isArray(roleNames)) {
+    await saveRoleAssignments(id, roleNames);
+  }
+
+  return { ...(data as any), roles: roleNames ?? [] };
 }
 
 export async function deleteMember(id: string) {
@@ -158,7 +230,6 @@ export async function deleteMember(id: string) {
   return { ok: true };
 }
 
-// Export a generateMagicToken alias expected by route code
 export async function generateMagicToken(memberId: string) {
   return regenerateMagicToken(memberId);
 }

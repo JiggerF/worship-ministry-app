@@ -12,6 +12,12 @@ if (!supabaseUrl) throw new Error("Missing SUPABASE_URL (or NEXT_PUBLIC_SUPABASE
 // create the client only when the key is present. This prevents Next from
 // returning an HTML error page (non-JSON) which crashes the client JSON parse.
 const supabase = serviceKey ? createClient(supabaseUrl, serviceKey) : null;
+const USE_DEV = process.env.USE_DEV_MOCK_ROSTER === "true" || process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
+
+// Simple in-memory store for dev-mode notes so the notes modal can be used
+// without a service role key during local development. This is intentionally
+// ephemeral and only for convenience in dev.
+const devNotesStore: Record<string, { notes: string } | undefined> = {};
 
 type RosterStatus = "DRAFT" | "LOCKED";
 
@@ -84,8 +90,11 @@ export async function GET(req: NextRequest) {
       const { default: makeDevRoster } = await import("@/lib/mocks/devRoster");
       const { assignments, setlists } = makeDevRoster(sundays);
 
+      const noteKey = `roster_note:${monthParam}`;
+      const notes = devNotesStore[noteKey]?.notes ?? null;
+
       return NextResponse.json(
-        { assignments, setlists, notes: null, debug: { sundays, assignmentsCount: assignments.length } },
+        { assignments, setlists, notes, debug: { sundays, assignmentsCount: assignments.length } },
         { status: 200, headers: { "x-dev-roster": "true-v2" } }
       );
     }
@@ -232,8 +241,52 @@ export async function PATCH(req: NextRequest) {
   if (body.notes !== undefined) {
     const key = `roster_note:${body.month}`;
     const value = { notes: body.notes };
+
+    if (!supabase) {
+      if (USE_DEV) {
+        devNotesStore[key] = value;
+        return NextResponse.json({ success: true });
+      }
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY." },
+        { status: 500 }
+      );
+    }
+
     const { error } = await supabase.from('app_settings').upsert({ key, value }, { onConflict: 'key' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  }
+
+  // If caller requested a revert action, unlock assignments for the month
+  if (body.action === 'revert') {
+    if (!supabase) {
+      if (USE_DEV) {
+        // In dev mode without a DB, we simply return success and let the client
+        // update its local state (the client already includes a fallback).
+        return NextResponse.json({ success: true });
+      }
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY." },
+        { status: 500 }
+      );
+    }
+
+    const parsedRevert = parseMonth(body.month);
+    if (!parsedRevert) {
+      return NextResponse.json({ error: "Invalid month format (YYYY-MM)" }, { status: 400 });
+    }
+
+    const { start, end } = getMonthRange(parsedRevert.year, parsedRevert.month);
+
+    const { error } = await supabase
+      .from("roster")
+      .update({ status: "DRAFT", locked_at: null })
+      .gte("date", start)
+      .lte("date", end);
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
     return NextResponse.json({ success: true });
   }
 

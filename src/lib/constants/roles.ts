@@ -6,10 +6,11 @@ import type { MemberRole } from "@/lib/types/database";
  */
 export const ROLES: { value: MemberRole; label: string }[] = [
   { value: "worship_lead", label: "Worship Lead" },
-  { value: "backup_vocals_1", label: "Backup Vocals 1" },
-  { value: "backup_vocals_2", label: "Backup Vocals 2" },
-  { value: "acoustic_guitar", label: "Acoustic Guitar" },
-  { value: "electric_guitar", label: "Electric Guitar" },
+  { value: "backup_vocals_1", label: "Vocals 1" },
+  { value: "backup_vocals_2", label: "Vocals 2" },
+  { value: "acoustic_guitar", label: "Acc Guitar" },
+  { value: "electric_guitar", label: "Elec Guitar" },
+  // renamed labels for compact admin table
   { value: "bass", label: "Bass" },
   { value: "keyboard", label: "Keys" },
   { value: "drums", label: "Drums" },

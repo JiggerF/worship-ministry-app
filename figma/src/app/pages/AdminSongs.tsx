@@ -708,7 +708,7 @@ export default function AdminSongs() {
               <Label htmlFor="category">Category *</Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) =>
+                onValueChange={(value: string) =>
                   setFormData({ ...formData, category: value })
                 }
               >
