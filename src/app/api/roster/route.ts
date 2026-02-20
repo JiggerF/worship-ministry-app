@@ -7,9 +7,11 @@ const supabaseUrl =
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl) throw new Error("Missing SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL).");
-if (!serviceKey) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY.");
 
-const supabase = createClient(supabaseUrl, serviceKey);
+// Don't throw during module load if the service role key is missing; instead
+// create the client only when the key is present. This prevents Next from
+// returning an HTML error page (non-JSON) which crashes the client JSON parse.
+const supabase = serviceKey ? createClient(supabaseUrl, serviceKey) : null;
 
 type RosterStatus = "DRAFT" | "LOCKED";
 
@@ -45,22 +47,63 @@ function getMonthRange(year: number, month1to12: number) {
 /* ----------------------------- */
 
 export async function GET(req: NextRequest) {
-  const monthParam = req.nextUrl.searchParams.get("month");
-  const parsed = parseMonth(monthParam);
+  try {
+    const monthParam = req.nextUrl.searchParams.get("month");
+    const parsed = parseMonth(monthParam);
 
-  if (!parsed) {
-    return NextResponse.json(
-      { error: "Invalid month format (YYYY-MM required)" },
-      { status: 400 }
-    );
-  }
+    if (!parsed) {
+      return NextResponse.json(
+        { error: "Invalid month format (YYYY-MM required)" },
+        { status: 400 }
+      );
+    }
 
-  const { start, end } = getMonthRange(parsed.year, parsed.month);
+    // Decide whether to return the development mock based on an explicit
+    // environment flag `USE_DEV_MOCK_ROSTER`. This allows devs to opt-in
+    // to mock data via .env.local (recommended) and switch to real DB by
+    // changing the flag without editing code.
+    const useMock = process.env.USE_DEV_MOCK_ROSTER === "true";
 
-  const { data, error } = await supabase
-    .from("roster")
-    .select(
-      `
+    if (useMock) {
+      // Build a list of Sundays (ISO date strings) within the requested month
+      const year = parsed.year;
+      const monthIdx = parsed.month - 1; // JS Date months are 0-indexed
+      const sundays: string[] = [];
+      // Find the first Sunday of the month
+      const first = new Date(Date.UTC(year, monthIdx, 1));
+      const day = first.getUTCDay();
+      const offsetToSunday = (7 - day) % 7;
+      const d = new Date(Date.UTC(year, monthIdx, 1 + offsetToSunday));
+      while (d.getUTCMonth() === monthIdx) {
+        sundays.push(d.toISOString().slice(0, 10));
+        d.setUTCDate(d.getUTCDate() + 7);
+      }
+
+      // Use the full development mock generator so the admin UI sees
+      // realistic assignments and setlists during local development.
+      const { default: makeDevRoster } = await import("@/lib/mocks/devRoster");
+      const { assignments, setlists } = makeDevRoster(sundays);
+
+      return NextResponse.json(
+        { assignments, setlists, notes: null, debug: { sundays, assignmentsCount: assignments.length } },
+        { status: 200, headers: { "x-dev-roster": "true-v2" } }
+      );
+    }
+
+    // Production/service path: require a service key
+    if (!supabase) {
+      return NextResponse.json(
+        { error: "Missing SUPABASE_SERVICE_ROLE_KEY." },
+        { status: 500 }
+      );
+    }
+
+    const { start, end } = getMonthRange(parsed.year, parsed.month);
+
+    const { data, error } = await supabase
+      .from("roster")
+      .select(
+        `
       id,
       date,
       role_id,
@@ -71,25 +114,47 @@ export async function GET(req: NextRequest) {
       members:member_id ( id, name ),
       roles:role_id ( id, name )
     `
-    )
-    .gte("date", start)
-    .lte("date", end)
-    .order("date", { ascending: true })
-    .order("role_id", { ascending: true });
+      )
+      .gte("date", start)
+      .lte("date", end)
+      .order("date", { ascending: true })
+      .order("role_id", { ascending: true });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    const assignments = (data ?? []).map((row: any) => ({
+      id: row.id,
+      date: row.date,
+      member_id: row.member_id,
+      status: row.status,
+      role: row.roles ?? null,
+      member: row.members ?? null,
+    }));
+
+    // Fetch any saved month note from app_settings key `roster_note:YYYY-MM`
+    const noteKey = `roster_note:${monthParam}`;
+    let note = null;
+    try {
+      const noteRes: any = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("key", noteKey)
+        .limit(1)
+        .single();
+      note = noteRes?.data?.value?.notes ?? null;
+    } catch (e) {
+      note = null;
+    }
+
+    return NextResponse.json({ assignments, notes: note }, { status: 200, headers: { "x-dev-roster": "false" } });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err?.message ?? String(err) },
+      { status: 500 }
+    );
   }
-
-  const assignments = (data ?? []).map((row: any) => ({
-    id: row.id,
-    date: row.date,
-    member_id: row.member_id,
-    status: row.status,
-    role: row.roles ?? null,      // { id, name: MemberRole }
-    member: row.members ?? null,  // { id, name } | null
-  }));
-  return NextResponse.json({ assignments });
 }
 
 /* ----------------------------- */
@@ -106,6 +171,12 @@ export async function GET(req: NextRequest) {
  * }
  */
 export async function POST(req: NextRequest) {
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Missing SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 500 }
+    );
+  }
   const body = await req.json().catch(() => null);
   if (!body || !Array.isArray(body.assignments)) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
@@ -138,6 +209,12 @@ export async function POST(req: NextRequest) {
  * Body: { month: "YYYY-MM" }
  */
 export async function PATCH(req: NextRequest) {
+  if (!supabase) {
+    return NextResponse.json(
+      { error: "Missing SUPABASE_SERVICE_ROLE_KEY." },
+      { status: 500 }
+    );
+  }
   const body = await req.json().catch(() => null);
   if (!body?.month) {
     return NextResponse.json({ error: "Missing month" }, { status: 400 });
@@ -149,6 +226,15 @@ export async function PATCH(req: NextRequest) {
       { error: "Invalid month format (YYYY-MM)" },
       { status: 400 }
     );
+  }
+
+  // If caller is saving notes for the month, persist into app_settings and return
+  if (body.notes !== undefined) {
+    const key = `roster_note:${body.month}`;
+    const value = { notes: body.notes };
+    const { error } = await supabase.from('app_settings').upsert({ key, value }, { onConflict: 'key' });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true });
   }
 
   const { start, end } = getMonthRange(parsed.year, parsed.month);

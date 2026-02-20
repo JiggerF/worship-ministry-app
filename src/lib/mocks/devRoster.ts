@@ -74,6 +74,20 @@ export function makeDevRoster(sundaysIso: string[], lockedDates: string[] = []) 
         status: dayStatus,
         member: { id: `m-${i}-7`, name: ["Joseph", "Ronald", "Ronald", "Ronald"][i % 4] },
       },
+       {
+        id: `mock-${iso}-sound`,
+        date: iso,
+        role: "sound",
+        status: dayStatus,
+        member: { id: `m-${i}-8`, name: ["Jigger", "Jigger", "Thad", "Teng"][i % 4] },
+      },
+                  {
+        id: `mock-${iso}-setup`,
+        date: iso,
+        role: "setup",
+        status: dayStatus,
+        member: { id: `m-${i}-9`, name: ["Thad", "Thad", "Thad/Jigger", "Thad/Jigger"][i % 4] },
+      },
     ];
 
     // Build a small varied setlist for this Sunday from the song pool

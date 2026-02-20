@@ -21,9 +21,9 @@ export default function SongPoolPage() {
     "all"
   );
 
-  // Only use mock data in development to match roster page behaviour
-  const isDev = process.env.NODE_ENV === "development";
-  const songsSource = isDev ? MOCK_SONGS : [];
+  // Only use mock data when the developer opts in via `NEXT_PUBLIC_USE_MOCK_ROSTER`
+  const useMock = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
+  const songsSource = useMock ? MOCK_SONGS : [];
 
   const filteredSongs = songsSource.filter((song) => {
     // Search filter

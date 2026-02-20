@@ -1,10 +1,10 @@
 import type { RosterStatus, SongStatus } from "@/lib/types/database";
 
 const ROSTER_BADGE_STYLES: Record<string, string> = {
-  locked: "bg-green-600 text-white",
-  draft: "bg-amber-500 text-white",
+  LOCKED: "bg-green-600 text-white",
+  DRAFT: "bg-amber-500 text-white",
   next: "border border-green-600 text-green-600 bg-white",
-  empty: "bg-gray-200 text-gray-500",
+  EMPTY: "bg-gray-200 text-gray-500",
 };
 
 export function RosterBadge({

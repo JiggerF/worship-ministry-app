@@ -196,16 +196,18 @@ export default function PortalRosterPage() {
         let mapped: PortalAssignment[] = raw.map((a) => ({
           id: String(a.id),
           date: String(a.date),
-          role: a.role?.name ?? null,
+          // Normalize role: accept either { name } object (DB) or string (dev mock)
+          role: typeof a.role === "string" ? (a.role as MemberRole) : a.role?.name ?? null,
           status: a.status,
           member: a.member ?? null,
         }));
 
         // Development helper: if the API returns no assignments, inject
-        // a small mock roster so the UI can be tested locally.
-        if (mapped.length === 0 && process.env.NODE_ENV === "development") {
+        // a small mock roster so the UI can be tested locally. Controlled
+        // by `NEXT_PUBLIC_USE_MOCK_ROSTER` for consistency with admin pages.
+        if (mapped.length === 0 && process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true") {
           const mockSundays = getMonthSundays(activeMonth);
-          const { assignments: devAssignments, setlists: devSet } = makeDevRoster(mockSundays, ["2026-02-22"]);
+          const { assignments: devAssignments, setlists: devSet } = makeDevRoster(mockSundays);
           mapped = devAssignments;
 
           if (!cancelled) setDevSetlists(devSet);

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 const SIDEBAR_ITEMS = [
   { href: "/admin/roster", label: "Roster", icon: "📋" },
+  { href: "/admin/songs", label: "Songs", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
 ];
@@ -29,7 +30,7 @@ export default function AdminLayout({
           <h1 className="text-sm font-bold text-gray-900">
             Worship Ministry
           </h1>
-          <p className="text-xs text-gray-400">Rostering Admin</p>
+          <p className="text-xs text-gray-600">Rostering Admin</p>
         </div>
 
         <nav className="flex-1 p-2">
@@ -42,7 +43,7 @@ export default function AdminLayout({
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors mb-0.5 ${
                   isActive
                     ? "bg-gray-100 text-gray-900"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-700"
                 }`}
               >
                 <span>{item.icon}</span>
@@ -61,7 +62,7 @@ export default function AdminLayout({
               <p className="text-sm font-medium text-gray-900">Admin</p>
               <Link
                 href="/admin/login"
-                className="text-xs text-gray-400 hover:text-gray-600"
+                className="text-xs text-gray-500 hover:text-gray-700"
               >
                 Sign out
               </Link>

@@ -13,7 +13,7 @@ export const ROLES: { value: MemberRole; label: string }[] = [
   { value: "bass", label: "Bass" },
   { value: "keyboard", label: "Keys" },
   { value: "drums", label: "Drums" },
-  { value: "percussion", label: "Percussion" },
+  { value: "percussion", label: "Perc" },
   { value: "setup", label: "Setup" },
   { value: "sound", label: "Sound" },
 ] as const;
@@ -49,7 +49,7 @@ export const ROSTER_COLUMN_ORDER: MemberRole[] = [
   "bass",
   "keyboard",
   "drums",
-  "percussion",
-  "setup",
   "sound",
+  "setup",
+  "percussion",
 ];

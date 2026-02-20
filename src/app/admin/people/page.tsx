@@ -1,51 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
 import type {
   MemberWithRoles,
   MemberRole,
 } from "@/lib/types/database";
+import { INITIAL_MEMBERS } from "@/lib/mocks/mockPeople";
 
-/* -------------------------------------------------- */
-/* Mock Members (until API wired)                    */
-/* -------------------------------------------------- */
-
-const INITIAL_MEMBERS: MemberWithRoles[] = [
-  {
-    id: "m1",
-    name: "John Moore",
-    email: "john@example.com",
-    phone: "+61400111222",
-    app_role: "Musician",
-    magic_token: "tok-001",
-    is_active: true,
-    created_at: "",
-    roles: ["worship_lead"],
-  },
-  {
-    id: "m2",
-    name: "Sarah Johnson",
-    email: "sarah@example.com",
-    phone: null,
-    app_role: "Musician",
-    magic_token: "tok-002",
-    is_active: true,
-    created_at: "",
-    roles: ["backup_vocals_1", "backup_vocals_2"],
-  },
-  {
-    id: "m3",
-    name: "David Chen",
-    email: "david@example.com",
-    phone: "+61400333444",
-    app_role: "Musician",
-    magic_token: "tok-003",
-    is_active: true,
-    created_at: "",
-    roles: ["acoustic_guitar", "keyboard", "drums"],
-  },
-];
+/* Mock members moved to src/lib/mocks/mockPeople.ts */
 
 /* -------------------------------------------------- */
 /* Form Shape                                         */
@@ -65,6 +28,27 @@ interface MemberFormData {
 export default function AdminPeoplePage() {
   const [members, setMembers] =
     useState<MemberWithRoles[]>(INITIAL_MEMBERS);
+
+  // Load real members from API when developer has NOT opted into mock data.
+  // Controlled by `NEXT_PUBLIC_USE_MOCK_ROSTER` for consistency.
+  useEffect(() => {
+    const useMock = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
+    if (useMock) return; // keep INITIAL_MEMBERS
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/members');
+        if (!res.ok) throw new Error('Failed to load members');
+        const data: MemberWithRoles[] = await res.json();
+        if (!cancelled) setMembers(data);
+      } catch (e) {
+        console.warn('Could not load /api/members, keeping local mock.', e);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, []);
 
   const [showModal, setShowModal] = useState(false);
   const [editingMember, setEditingMember] =

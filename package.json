@@ -11,6 +11,14 @@
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.96.0",
+    "class-variance-authority": "^0.6.2",
+    "clsx": "^2.0.0",
+    "lucide-react": "^0.268.0",
+    "tailwind-merge": "^1.14.0",
+    "@radix-ui/react-slot": "^1.0.0",
+    "@radix-ui/react-select": "^1.0.0",
+    "@radix-ui/react-dialog": "^1.0.0",
+    "@radix-ui/react-label": "^1.0.0",
     "next": "^16.1.6",
     "react": "^19.2.3",
     "react-dom": "^19.2.3"

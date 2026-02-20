@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader } from "./components/ui/card";
-import { Badge } from "./components/ui/badge";
-import { Button } from "./components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "./components/ui/tabs";
+import { Card, CardContent, CardHeader } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Calendar, Music, Download, User, ChevronRight } from "lucide-react";
 
 interface Musician {
@@ -276,7 +276,7 @@ function RosterCard({ roster, isUpcoming }: { roster: ServiceRoster; isUpcoming?
   );
 }
 
-export default function App() {
+export default function Roster() {
   // Helper to check if a date is in the current week
   const isCurrentWeek = (date: Date) => {
     const today = new Date();
