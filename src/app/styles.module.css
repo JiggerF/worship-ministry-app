@@ -1,0 +1,33 @@
+.darkerText {
+  color: #111 !important;
+}
+
+.inputDarkPlaceholder::placeholder {
+  color: #111 !important;
+  opacity: 0.5;
+}
+
+.inputDarkText {
+  color: #111 !important;
+  opacity: 0.5;
+}
+
+.selectDarkText {
+  color: #111 !important;
+  opacity: 0.5;
+}
+
+/* Assignment text styles: role label (muted but readable) and member name (dark) */
+.assignmentRole {
+  color: #4B5563; /* gray-600 */
+  font-weight: 500; /* slightly less bold */
+}
+
+.assignmentName {
+  color: #0F172A; /* slightly darker than gray-900 */
+  font-weight: 700; /* bolder for stronger emphasis */
+  /* Use a more neutral sans that better matches Figma mock (falls back to system sans) */
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}

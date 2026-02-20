@@ -1,381 +1,563 @@
 "use client";
 
-import { useState } from "react";
-import { ROSTER_COLUMN_ORDER, ROLE_LABEL_MAP } from "@/lib/constants/roles";
-import { formatSundayDate } from "@/lib/utils/dates";
+import { useEffect, useMemo, useState } from "react";
+import { ROSTER_COLUMN_ORDER, ROLE_LABEL_MAP, ROLES } from "@/lib/constants/roles";
+import { formatSundayDate, getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import { RosterBadge } from "@/components/status-badge";
-import { MOCK_ROSTER } from "@/lib/mock-data";
-import type { SundayRoster, RosterAssignmentWithMember, MemberRole } from "@/lib/types/database";
+import makeDevRoster from "@/lib/mocks/devRoster";
+import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles } from "@/lib/types/database";
 
-const MONTHS = [
-  { label: "February 2026", value: "2026-02" },
-  { label: "March 2026", value: "2026-03" },
-];
+const ROLE_ID_MAP: Record<MemberRole, number> = Object.fromEntries(
+  ROLES.map((r, i) => [r.value, i + 1])
+) as Record<MemberRole, number>;
 
-// Mock available members per role (would come from availability + members table)
-const MOCK_AVAILABLE: Record<string, { id: string; name: string }[]> = {
-  worship_lead: [{ id: "m1", name: "John Moore" }, { id: "m7", name: "James Taylor" }],
-  backup_vocals_1: [{ id: "m2", name: "Sarah Johnson" }, { id: "m8", name: "Peter Patter" }],
-  backup_vocals_2: [{ id: "m2", name: "Sarah Johnson" }],
-  acoustic_guitar: [{ id: "m3", name: "David Chen" }, { id: "m9", name: "Andre Garie" }],
-  electric_guitar: [{ id: "m6", name: "Chris Martinez" }, { id: "m10", name: "Ryon Janice" }],
-  bass: [{ id: "m6", name: "Chris Martinez" }],
-  keyboard: [{ id: "m4", name: "Emily Rodriguez" }, { id: "m3", name: "David Chen" }, { id: "m11", name: "Mango" }],
-  drums: [{ id: "m5", name: "Michael Thompson" }, { id: "m3", name: "David Chen" }],
-  percussion: [{ id: "m5", name: "Michael Thompson" }],
-  setup: [],
-  sound: [],
-};
+function getCurrentMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function addMonths(yearMonth: string, delta: number): string {
+  const [y, m] = yearMonth.split("-").map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getMonthLabel(yearMonth: string): string {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function monthToNumber(yearMonth: string) {
+  const [y, m] = yearMonth.split("-").map(Number);
+  return y * 12 + m;
+}
 
 export default function AdminRosterPage() {
-  const [activeMonth, setActiveMonth] = useState(MONTHS[0].value);
-  const [roster, setRoster] = useState<SundayRoster[]>(MOCK_ROSTER);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
+  const [activeMonth, setActiveMonth] = useState(getCurrentMonth);
+  const [roster, setRoster] = useState<SundayRoster[]>([]);
+  const [membersList, setMembersList] = useState<MemberWithRoles[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [finalising, setFinalising] = useState(false);
+  const [reverting, setReverting] = useState(false);
+  const [monthNotes, setMonthNotes] = useState("");
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
 
-  const filteredRoster = roster.filter((r) => r.date.startsWith(activeMonth));
+  /* ----------------------------- */
+  /* Load Roster                   */
+  /* ----------------------------- */
 
-  // Mock availability response tracking
-  const respondedCount = 8;
-  const totalMembers = 12;
-  const nonRespondents = ["Peter Morris", "Andre Garie", "Alex Kim", "Mango"];
+  // Navigation bounds relative to today
+  const currentMonth = getCurrentMonth();
+  const minMonth = addMonths(currentMonth, -6);
+  const maxMonth = addMonths(currentMonth, 2);
 
-  function getAssignment(sunday: SundayRoster, role: MemberRole): RosterAssignmentWithMember | undefined {
-    return sunday.assignments.find((a) => a.role === role);
-  }
 
-  function handleAssign(date: string, role: MemberRole, memberId: string, memberName: string) {
-    setRoster((prev) =>
-      prev.map((sunday) => {
-        if (sunday.date !== date) return sunday;
-        const existing = sunday.assignments.findIndex((a) => a.role === role);
-        const newAssignment: RosterAssignmentWithMember = {
-          id: `new-${Date.now()}`,
-          member_id: memberId,
-          date,
-          role,
-          status: "draft",
-          assigned_by: null,
-          assigned_at: new Date().toISOString(),
-          locked_at: null,
-          member: { id: memberId, name: memberName },
-        };
-        const newAssignments = [...sunday.assignments];
-        if (existing >= 0) {
-          newAssignments[existing] = newAssignment;
-        } else {
-          newAssignments.push(newAssignment);
-        }
-        return { ...sunday, assignments: newAssignments, status: "draft" as const };
-      })
+  async function loadRoster() {
+    setLoading(true);
+
+    const res = await fetch(`/api/roster?month=${activeMonth}`);
+    let json: any = null;
+    try {
+      json = await res.json();
+    } catch (err) {
+      // empty or invalid JSON response
+      json = null;
+    }
+
+    if (!res.ok) {
+      const err = json?.error ?? res.statusText ?? 'Request failed';
+      console.error(err);
+      setLoading(false);
+      return;
+    }
+
+    // read any note saved for this month
+    setMonthNotes(json?.notes ?? "");
+
+    const sundays = getSundaysInMonth(
+      Number(activeMonth.split("-")[0]),
+      Number(activeMonth.split("-")[1]) - 1
     );
-  }
 
-  function handleRemove(date: string, role: MemberRole) {
-    setRoster((prev) =>
-      prev.map((sunday) => {
-        if (sunday.date !== date) return sunday;
-        return {
-          ...sunday,
-          assignments: sunday.assignments.filter((a) => a.role !== role),
-        };
-      })
-    );
-  }
+    const structured: SundayRoster[] = sundays.map((dateObj) => {
+      const iso = toISODate(dateObj);
 
-  // Count burnout (3+ assignments in the month)
-  function getBurnoutMembers(): Set<string> {
-    const counts: Record<string, number> = {};
-    filteredRoster.forEach((sunday) => {
-      sunday.assignments.forEach((a) => {
-        counts[a.member_id] = (counts[a.member_id] || 0) + 1;
-      });
+      const assignments =
+        (json.assignments ?? [])
+          .filter((a: any) => a.date === iso)
+          .map((a: any) => ({
+            id: a.id,
+            member_id: a.member_id,
+            date: a.date,
+            // Normalize role shape: server mock may send a string like 'worship_lead',
+            // while real DB rows include a role object { id, name } under the alias.
+            role: typeof a.role === "string"
+              ? { id: ROLE_ID_MAP[a.role as MemberRole], name: a.role }
+              : a.role,
+            status: a.status,
+            assigned_by: null,
+            assigned_at: a.assigned_at,
+            locked_at: a.locked_at,
+            member: a.member ?? a.members,
+          })) ?? [];
+
+      const status: RosterStatus | "EMPTY" = assignments.length === 0
+        ? "EMPTY"
+        : assignments.every((a: any) => a.status === "LOCKED")
+          ? "LOCKED"
+          : "DRAFT";
+
+      return {
+        date: iso,
+        status,
+        assignments,
+        setlist: [],
+        notes: null,
+      };
     });
-    return new Set(
-      Object.entries(counts)
-        .filter(([, count]) => count >= 3)
-        .map(([id]) => id)
-    );
-  }
 
-  const burnoutMembers = getBurnoutMembers();
+    // Development mock: inject fake roster when API returns nothing and
+    // the developer has explicitly opted in via `NEXT_PUBLIC_USE_MOCK_ROSTER=true`.
+    if (
+      (process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true") &&
+      structured.every((s) => s.status === "EMPTY")
+    ) {
+      const mockSundayIsos = sundays.map(toISODate);
+      const { assignments: mockAssignments } = makeDevRoster(mockSundayIsos);
 
-  // Count unfilled roles
-  function getConflicts(): string[] {
-    const conflicts: string[] = [];
-    filteredRoster.forEach((sunday) => {
-      ROSTER_COLUMN_ORDER.forEach((role) => {
-        if (!sunday.assignments.find((a) => a.role === role)) {
-          conflicts.push(`${ROLE_LABEL_MAP[role]} needed for ${formatSundayDate(sunday.date)}`);
-        }
+      const mockedStructured: SundayRoster[] = sundays.map((dateObj) => {
+        const iso = toISODate(dateObj);
+        const dayAssignments = mockAssignments
+          .filter((a) => a.date === iso)
+          .map((a) => ({
+            id: a.id,
+            date: a.date,
+            role_id: ROLE_ID_MAP[a.role as MemberRole],
+            member_id: a.member?.id ?? null,
+            status: a.status,
+            assigned_by: null,
+            assigned_at: new Date().toISOString(),
+            locked_at: null,
+            role: { id: ROLE_ID_MAP[a.role as MemberRole], name: a.role },
+            member: a.member ?? undefined,
+          }));
+
+          const dayStatus: RosterStatus | "EMPTY" =
+          dayAssignments.length === 0
+            ? "EMPTY"
+            : dayAssignments.every((a: any) => a.status === "LOCKED")
+              ? "LOCKED"
+              : "DRAFT";
+
+        return { date: iso, status: dayStatus, assignments: dayAssignments, setlist: [], notes: null };
       });
-    });
-    return conflicts;
+
+      setRoster(mockedStructured);
+      setLoading(false);
+      return;
+    }
+
+      setRoster(structured);
+    setLoading(false);
   }
 
-  const conflicts = getConflicts();
+    async function loadMembers() {
+      try {
+        const res = await fetch('/api/members');
+        if (!res.ok) throw new Error('Failed to load members');
+        const data = await res.json();
+        if (Array.isArray(data)) setMembersList(data as MemberWithRoles[]);
+      } catch (e) {
+        console.warn('Could not load members for roster selects', e);
+        setMembersList([]);
+      }
+    }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { loadRoster(); loadMembers(); }, [activeMonth]);
+
+  /* ----------------------------- */
+  /* Derived State                 */
+  /* ----------------------------- */
+
+  const monthIsLocked = useMemo(() => {
+    if (roster.length === 0) return false;
+    return roster.every((r) => r.status === "LOCKED");
+  }, [roster]);
+
+  const monthHasData = useMemo(() => {
+    return roster.some((r) => r.status !== "EMPTY");
+  }, [roster]);
+
+  /* ----------------------------- */
+  /* Save Draft                    */
+  /* ----------------------------- */
+
+  async function handleSaveDraft() {
+    if (saving) return;
+
+    setSaving(true);
+
+    const flatAssignments = roster.flatMap((sunday) =>
+      sunday.assignments.map((a) => ({
+        member_id: a.member_id,
+        date: a.date,
+        role_id: (a as any).role?.id ?? ROLE_ID_MAP[((a as any).role?.name) as MemberRole],
+      }))
+    );
+
+    const res = await fetch("/api/roster", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ assignments: flatAssignments }),
+    });
+
+    setSaving(false);
+
+    if (!res.ok) {
+      alert("Failed to save draft");
+      return;
+    }
+
+    await loadRoster();
+    alert("Draft saved");
+  }
+
+  /* ----------------------------- */
+  /* Finalise                      */
+  /* ----------------------------- */
+
+  async function handleFinalise() {
+    if (monthIsLocked || finalising) return;
+
+    const confirmed = window.confirm(
+      "Finalise this month? This will lock all assignments."
+    );
+    if (!confirmed) return;
+
+    setFinalising(true);
+
+    const res = await fetch("/api/roster", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: activeMonth }),
+    });
+
+    setFinalising(false);
+
+    if (!res.ok) {
+      alert("Failed to finalise");
+      return;
+    }
+
+    await loadRoster();
+  }
+
+  /* ----------------------------- */
+  /* Revert to Draft               */
+  /* ----------------------------- */
+
+  async function handleRevertToDraft() {
+    if (!monthIsLocked || reverting) return;
+
+    const confirmed = window.confirm(
+      "Revert this month to Draft? Assignments will be unlocked for editing."
+    );
+    if (!confirmed) return;
+
+    setReverting(true);
+
+    // TODO: implement PATCH /api/roster with { month, action: "revert" } on the server
+    const res = await fetch("/api/roster", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ month: activeMonth, action: "revert" }),
+    });
+
+    setReverting(false);
+
+    if (!res.ok) {
+      // Fallback: update local state so the UI reflects the revert in dev/mock mode
+      setRoster((prev) =>
+        prev.map((s) => ({
+          ...s,
+          status: "DRAFT" as RosterStatus,
+          assignments: s.assignments.map((a) => ({
+            ...a,
+            status: "DRAFT" as RosterStatus,
+            locked_at: null,
+          })),
+        }))
+      );
+      return;
+    }
+
+    await loadRoster();
+  }
+
+  /* ----------------------------- */
+  /* UI                            */
+  /* ----------------------------- */
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">
-            Worship Ministry Rostering
-          </h1>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Month Selector */}
-          <select
-            value={activeMonth}
-            onChange={(e) => setActiveMonth(e.target.value)}
-            className="px-3 py-2 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900"
+    <div className="space-y-4">
+
+      {/* Page Title */}
+      <h1 className="text-xl font-bold text-gray-900">Worship Ministry Rostering</h1>
+
+      {/* Month Navigation + Status */}
+      <div className="flex items-center justify-between gap-4">
+        {/* Left: month nav */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, -1)); }}
+            disabled={monthToNumber(activeMonth) <= monthToNumber(minMonth)}
+            className={`p-1.5 rounded-md transition-colors ${monthToNumber(activeMonth) <= monthToNumber(minMonth) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+            aria-label="Previous month"
           >
-            {MONTHS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Action Buttons */}
-          <button className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            Save Draft
+            ←
           </button>
-          <button className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-semibold transition-colors">
-            ✓ PUBLISH
-          </button>
-        </div>
-      </div>
 
-      {/* Availability Tracker */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-2">
-          Availability Responses
-        </h3>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-green-600 font-semibold text-lg">{respondedCount}</span>
-            <span className="text-sm text-gray-500">/ {totalMembers} responded</span>
-          </div>
-          {nonRespondents.length > 0 && (
-            <div className="text-sm text-gray-400">
-              Not responded:{" "}
-              <span className="text-red-500 font-medium">
-                {nonRespondents.join(", ")}
-              </span>
-            </div>
+          <span className="text-base font-semibold text-gray-900 min-w-[9rem] text-center">
+            {getMonthLabel(activeMonth)}
+            {activeMonth === currentMonth && (
+              <span className="ml-2 text-xs text-white bg-green-600 px-2 py-0.5 rounded">Current</span>
+            )}
+          </span>
+
+          <button
+            onClick={() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, 1)); }}
+            disabled={monthToNumber(activeMonth) >= monthToNumber(maxMonth)}
+            className={`p-1.5 rounded-md transition-colors ${monthToNumber(activeMonth) >= monthToNumber(maxMonth) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
+            aria-label="Next month"
+          >
+            →
+          </button>
+
+          {/* hide jump when already on current month */}
+          {activeMonth !== currentMonth && (
+            <button
+              onClick={() => { setMonthNotes(""); setActiveMonth(currentMonth); }}
+              className="ml-3 px-2 py-1 text-sm rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+            >
+              Jump to Current
+            </button>
           )}
         </div>
+
+        {/* Right: top status badge + note */}
+        {!loading && (
+          <div className="flex items-center gap-4">
+            <RosterBadge status={monthIsLocked ? "LOCKED" : "DRAFT"} />
+
+            <div>
+              <button
+                onClick={() => setIsNoteOpen(true)}
+                title={monthNotes ? 'View note' : 'Add note'}
+                className="relative inline-flex items-center justify-center w-9 h-9 rounded-full bg-transparent hover:bg-gray-100"
+              >
+                {/* simple note icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-gray-600">
+                  <path d="M21 15v4a1 1 0 0 1-1 1H6l-5-5V5a1 1 0 0 1 1-1h14"></path>
+                  <path d="M17 8h.01"></path>
+                </svg>
+                {monthNotes ? (
+                  <span className="absolute -top-0.5 -right-0.5 inline-flex items-center justify-center w-5 h-5 text-[11px] font-semibold text-amber-900 bg-amber-300 rounded-full">1</span>
+                ) : null}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Roster Grid */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-3 py-3 font-medium text-gray-500 sticky left-0 bg-gray-50 min-w-[120px]">
-                Date
-              </th>
-              {ROSTER_COLUMN_ORDER.map((role) => (
-                <th
-                  key={role}
-                  className="text-left px-2 py-3 font-medium text-gray-500 min-w-[110px]"
-                >
-                  {ROLE_LABEL_MAP[role]}
-                </th>
-              ))}
-              <th className="text-left px-2 py-3 font-medium text-gray-500 min-w-[40px]">
+      {/* Note modal handled via icon — keep table area uncluttered */}
 
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRoster.map((sunday) => (
-              <>
-                <tr key={sunday.date} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="px-3 py-3 sticky left-0 bg-white">
-                    <button
-                      onClick={() =>
-                        setExpandedDate(
-                          expandedDate === sunday.date ? null : sunday.date
-                        )
-                      }
-                      className="flex items-center gap-1 font-medium text-gray-900"
-                    >
-                      <span className="text-gray-400 text-xs">
-                        {expandedDate === sunday.date ? "▼" : "▶"}
-                      </span>
-                      {formatSundayDate(sunday.date)}
-                    </button>
+      {/* Table */}
+      {loading ? (
+        <div className="py-16 text-center text-sm text-gray-400">Loading roster…</div>
+      ) : (
+        <div className="bg-white rounded-xl border overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b">
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                {ROSTER_COLUMN_ORDER.map((role) => (
+                  <th key={role} className="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    {ROLE_LABEL_MAP[role]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {roster.map((sunday) => (
+                <tr key={sunday.date} className="border-b hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-3 font-medium text-gray-900">
+                    {new Date(sunday.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </td>
+
                   {ROSTER_COLUMN_ORDER.map((role) => {
-                    const assignment = getAssignment(sunday, role);
-                    const isBurnout = assignment && burnoutMembers.has(assignment.member_id);
+                    const assignment = sunday.assignments.find(
+                      (a) => a.role.name === role
+                    );
+                    // lock all fields when the month is locked
+                    const lockedForMonth = monthIsLocked;
+                    // Only show members who have this role (instrument)
+                    const candidates = membersList.filter((m) => m.roles?.includes(role as MemberRole));
+
                     return (
                       <td key={role} className="px-2 py-2">
-                        {assignment ? (
-                          <div className="flex items-center gap-1">
-                            <select
-                              value={assignment.member_id}
-                              onChange={(e) => {
-                                if (e.target.value === "__remove__") {
-                                  handleRemove(sunday.date, role);
-                                } else {
-                                  const member = MOCK_AVAILABLE[role]?.find(
-                                    (m) => m.id === e.target.value
-                                  );
-                                  if (member) {
-                                    handleAssign(sunday.date, role, member.id, member.name);
-                                  }
-                                }
-                              }}
-                              className={`px-2 py-1 rounded border text-xs font-medium max-w-[100px] ${
-                                assignment.status === "locked"
-                                  ? "border-green-300 bg-green-50"
-                                  : "border-amber-300 bg-amber-50"
-                              }`}
-                            >
-                              <option value={assignment.member_id}>
-                                {assignment.member.name}
-                              </option>
-                              {MOCK_AVAILABLE[role]
-                                ?.filter((m) => m.id !== assignment.member_id)
-                                .map((m) => (
-                                  <option key={m.id} value={m.id}>
-                                    {m.name}
-                                  </option>
-                                ))}
-                              <option value="__remove__">— Remove —</option>
-                            </select>
-                            {isBurnout && (
-                              <span title="Rostered 3+ times this month" className="text-amber-500">
-                                ⚠
-                              </span>
-                            )}
-                          </div>
+                        { (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                            {assignment?.member?.name ?? "—"}
+                          </span>
                         ) : (
                           <select
-                            value=""
+                            aria-label={`Assign ${ROLE_LABEL_MAP[role]}`}
+                            value={assignment?.member_id ?? ""}
                             onChange={(e) => {
-                              const member = MOCK_AVAILABLE[role]?.find(
-                                (m) => m.id === e.target.value
+                              const memberId = e.target.value || null;
+                              const memberFull = candidates.find((m) => m.id === memberId) || undefined;
+                              const member = memberFull ? { id: memberFull.id, name: memberFull.name } : undefined;
+
+                              setRoster((prev) =>
+                                prev.map((s) => {
+                                  if (s.date !== sunday.date) return s;
+
+                                  const existingIdx = s.assignments.findIndex((a) => a.role.name === role);
+
+                                  if (existingIdx >= 0) {
+                                    const updated = s.assignments.map((a) => {
+                                      if (a.role.name !== role) return a;
+
+                                      const newStatus: RosterStatus = a.status === 'LOCKED' ? 'LOCKED' : 'DRAFT';
+
+                                      return {
+                                        ...a,
+                                        member_id: memberId,
+                                        member,
+                                        status: newStatus,
+                                      };
+                                    });
+                                    return { ...s, assignments: updated };
+                                  }
+
+                                  // create a new assignment for this role (client-side draft)
+                                  const newAssignment: any = {
+                                    id: "",
+                                    role_id: ROLE_ID_MAP[role as MemberRole],
+                                    member_id: memberId,
+                                    date: s.date,
+                                    role: { id: ROLE_ID_MAP[role as MemberRole], name: role },
+                                    status: 'DRAFT' as RosterStatus,
+                                    assigned_by: null,
+                                    assigned_at: new Date().toISOString(),
+                                    locked_at: null,
+                                    member,
+                                  };
+
+                                  return { ...s, assignments: [...s.assignments, newAssignment] };
+                                })
                               );
-                              if (member) {
-                                handleAssign(sunday.date, role, member.id, member.name);
-                              }
                             }}
-                            className="px-2 py-1 rounded border border-dashed border-gray-300 text-xs text-gray-400 max-w-[100px]"
+                            className="w-full text-sm border border-gray-300 text-gray-800 bg-white rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-200"
                           >
-                            <option value="">—</option>
-                            {MOCK_AVAILABLE[role]?.map((m) => (
-                              <option key={m.id} value={m.id}>
-                                {m.name}
-                              </option>
+                            <option value="">— Unassigned —</option>
+                            {candidates.map((m) => (
+                              <option key={m.id} value={m.id}>{m.name}</option>
                             ))}
                           </select>
                         )}
                       </td>
                     );
                   })}
-                  <td className="px-2 py-2 text-gray-400 cursor-pointer hover:text-gray-600">
-                    ···
-                  </td>
                 </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-                {/* Expanded Row: Setlist + Notes */}
-                {expandedDate === sunday.date && (
-                  <tr key={`${sunday.date}-expanded`} className="border-b border-gray-100 bg-gray-50">
-                    <td colSpan={ROSTER_COLUMN_ORDER.length + 2} className="px-6 py-4">
-                      <div className="max-w-xl space-y-4">
-                        {/* Setlist */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700 mb-2">
-                            Setlist for {formatSundayDate(sunday.date)} — Sunday Morning
-                          </h4>
-                          {sunday.setlist.length > 0 ? (
-                            <ol className="space-y-1.5">
-                              {sunday.setlist.map((item) => (
-                                <li key={item.id} className="text-sm text-gray-700">
-                                  {item.position}. {item.song.title}
-                                  {item.song.artist && (
-                                    <span className="text-gray-400 ml-1">
-                                      · {item.song.artist}
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ol>
-                          ) : (
-                            <p className="text-sm text-gray-400 italic">
-                              No songs assigned yet
-                            </p>
-                          )}
-                        </div>
+      {/* Bottom action buttons (Save / Finalise) — moved to bottom right */}
+      {!loading && (
+        <div className="flex justify-end gap-2 mt-4">
+          <button
+            onClick={handleSaveDraft}
+            disabled={saving || monthIsLocked}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            {saving ? "Saving..." : "Save Draft"}
+          </button>
 
-                        {/* PDF Bundle */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700 mb-1">
-                            Bundled PDF
-                          </h4>
-                          {sunday.setlist.length > 0 ? (
-                            <div className="flex items-center gap-3">
-                              <button className="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-white text-xs font-medium transition-colors">
-                                Generate PDF
-                              </button>
-                              <span className="text-xs text-gray-400">
-                                View v1 | Download
-                              </span>
-                            </div>
-                          ) : (
-                            <p className="text-xs text-gray-400">
-                              Add songs to generate PDF
-                            </p>
-                          )}
-                        </div>
-
-                        {/* Notes */}
-                        <div>
-                          <h4 className="text-sm font-semibold text-gray-700 mb-1">
-                            Notes
-                          </h4>
-                          <input
-                            type="text"
-                            defaultValue={sunday.notes || ""}
-                            placeholder="Add notes..."
-                            className="w-full px-3 py-1.5 rounded border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                          />
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Conflict Alerts */}
-      {conflicts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            Conflict Alerts
-          </h3>
-          <div className="space-y-2">
-            {conflicts.slice(0, 5).map((conflict, i) => (
-              <div key={i} className="flex items-center gap-2 text-sm">
-                <span className="text-red-500">⚠</span>
-                <span className="text-gray-700">{conflict}</span>
+          {monthIsLocked ? (
+            <button
+              onClick={handleRevertToDraft}
+              disabled={reverting}
+              className="px-4 py-2 rounded-lg text-sm text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {reverting ? "Reverting..." : "Revert to Draft"}
+            </button>
+          ) : (
+            <button
+              onClick={handleFinalise}
+              disabled={finalising || !monthHasData}
+              className="px-4 py-2 rounded-lg text-sm text-white bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              {finalising ? "Finalising..." : "✓ Finalise"}
+            </button>
+          )}
+        </div>
+      )}
+      {/* Note edit/view modal */}
+      {isNoteOpen && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-[720px] max-w-full p-6 border border-gray-200">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-semibold">{monthNotes ? 'View / Edit Note' : 'Add Note'}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsNoteOpen(false)} className="text-sm text-gray-500">Close</button>
               </div>
-            ))}
-            {conflicts.length > 5 && (
-              <p className="text-xs text-gray-400">
-                +{conflicts.length - 5} more alerts
-              </p>
-            )}
+            </div>
+
+            <div className="mt-4">
+              <textarea
+                value={monthNotes}
+                onChange={(e) => setMonthNotes(e.target.value)}
+                rows={8}
+                className={`w-full text-sm ${monthIsLocked ? 'text-gray-600 bg-gray-50' : 'text-gray-800 bg-white'} border border-gray-200 rounded px-3 py-2`}
+                readOnly={monthIsLocked}
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setIsNoteOpen(false)} className="px-3 py-1 border rounded">Cancel</button>
+              <button
+                onClick={async () => {
+                  if (monthIsLocked) { setIsNoteOpen(false); return; }
+                  try {
+                    const res = await fetch('/api/roster', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ month: activeMonth, notes: monthNotes }) });
+                    if (!res.ok) throw new Error('Save failed');
+                    setIsNoteOpen(false);
+                    // reload roster to pick up any changes
+                    await loadRoster();
+                  } catch (err) {
+                    alert('Failed to save note');
+                  }
+                }}
+                disabled={monthIsLocked}
+                className={`px-3 py-1 bg-[#071027] text-white rounded ${monthIsLocked ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                Save Note
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
 }
+
+// notes are saved via modal control in the page; no standalone button needed

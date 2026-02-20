@@ -1,51 +1,85 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
-import type { Member, MemberRole } from "@/lib/types/database";
+import type { MemberWithRoles, MemberRole } from "@/lib/types/database";
+import { INITIAL_MEMBERS } from "@/lib/mocks/mockPeople";
 
-// Mock members
-const INITIAL_MEMBERS: Member[] = [
-  { id: "m1", name: "John Moore", email: "john@example.com", phone: "+61400111222", roles: ["worship_lead"], magic_token: "tok-001", is_active: true, created_at: "" },
-  { id: "m2", name: "Sarah Johnson", email: "sarah@example.com", phone: null, roles: ["backup_vocals_1", "backup_vocals_2"], magic_token: "tok-002", is_active: true, created_at: "" },
-  { id: "m3", name: "David Chen", email: "david@example.com", phone: "+61400333444", roles: ["acoustic_guitar", "keyboard", "drums"], magic_token: "tok-003", is_active: true, created_at: "" },
-  { id: "m4", name: "Emily Rodriguez", email: "emily@example.com", phone: null, roles: ["keyboard"], magic_token: "tok-004", is_active: true, created_at: "" },
-  { id: "m5", name: "Michael Thompson", email: "michael@example.com", phone: "+61400555666", roles: ["drums", "percussion"], magic_token: "tok-005", is_active: true, created_at: "" },
-  { id: "m6", name: "Chris Martinez", email: "chris@example.com", phone: null, roles: ["bass", "electric_guitar"], magic_token: "tok-006", is_active: true, created_at: "" },
-  { id: "m7", name: "James Taylor", email: "james@example.com", phone: null, roles: ["worship_lead", "acoustic_guitar"], magic_token: "tok-007", is_active: false, created_at: "" },
-];
+const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 
 interface MemberFormData {
   name: string;
   email: string;
   phone: string;
+  app_role: "Admin" | "Musician";
   roles: MemberRole[];
 }
 
 export default function AdminPeoplePage() {
-  const [members, setMembers] = useState<Member[]>(INITIAL_MEMBERS);
+  // Initialize empty when not in mock mode — avoids the mock-data flash on load
+  const [members, setMembers] = useState<MemberWithRoles[]>(
+    USE_MOCK ? INITIAL_MEMBERS : []
+  );
+
+  useEffect(() => {
+    if (USE_MOCK) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/members");
+        if (!res.ok) throw new Error("Failed to load members");
+        const data: MemberWithRoles[] = await res.json();
+        if (!cancelled) setMembers(data);
+      } catch (e) {
+        console.warn("Could not load /api/members, keeping local mock.", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [showModal, setShowModal] = useState(false);
-  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [editingMember, setEditingMember] = useState<MemberWithRoles | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
   const [form, setForm] = useState<MemberFormData>({
     name: "",
     email: "",
     phone: "",
+    app_role: "Musician",
     roles: [],
   });
 
+  const [sortField, setSortField] = useState<"name" | "email" | "roles" | "status">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+
+  function toggleSort(field: "name" | "email" | "roles" | "status") {
+    if (sortField === field) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  }
+
   function openAddModal() {
     setEditingMember(null);
-    setForm({ name: "", email: "", phone: "", roles: [] });
+    setSaveError(null);
+    setForm({ name: "", email: "", phone: "", app_role: "Musician", roles: [] });
     setShowModal(true);
   }
 
-  function openEditModal(member: Member) {
+  function openEditModal(member: MemberWithRoles) {
     setEditingMember(member);
+    setSaveError(null);
     setForm({
       name: member.name,
       email: member.email,
       phone: member.phone || "",
+      app_role: member.app_role,
       roles: member.roles,
     });
     setShowModal(true);
@@ -60,38 +94,110 @@ export default function AdminPeoplePage() {
     }));
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (editingMember) {
-      setMembers((prev) =>
-        prev.map((m) =>
-          m.id === editingMember.id
-            ? { ...m, name: form.name, email: form.email, phone: form.phone || null, roles: form.roles }
-            : m
-        )
-      );
-    } else {
-      const newMember: Member = {
-        id: `m${Date.now()}`,
+
+    if (USE_MOCK) {
+      if (editingMember) {
+        setMembers((prev) =>
+          prev.map((m) =>
+            m.id === editingMember.id
+              ? { ...m, name: form.name, email: form.email, phone: form.phone || null, roles: form.roles }
+              : m
+          )
+        );
+      } else {
+        setMembers((prev) => [
+          ...prev,
+          {
+            id: `m${Date.now()}`,
+            name: form.name,
+            email: form.email,
+            phone: form.phone || null,
+            app_role: form.app_role,
+            roles: form.roles,
+            magic_token: crypto.randomUUID(),
+            is_active: true,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      }
+      setShowModal(false);
+      return;
+    }
+
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const body = {
         name: form.name,
         email: form.email,
         phone: form.phone || null,
+        app_role: form.app_role,
         roles: form.roles,
-        magic_token: crypto.randomUUID(),
-        is_active: true,
-        created_at: new Date().toISOString(),
       };
-      setMembers((prev) => [...prev, newMember]);
+
+      if (editingMember) {
+        const res = await fetch(`/api/members/${editingMember.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error || "Failed to update member");
+        }
+        const updated: MemberWithRoles = await res.json();
+        setMembers((prev) =>
+          prev.map((m) => (m.id === editingMember.id ? updated : m))
+        );
+      } else {
+        const res = await fetch("/api/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, is_active: true }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error || "Failed to create member");
+        }
+        const created: MemberWithRoles = await res.json();
+        setMembers((prev) => [...prev, created]);
+      }
+      setShowModal(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSaving(false);
     }
-    setShowModal(false);
   }
 
-  function toggleActive(memberId: string) {
+  async function toggleActive(member: MemberWithRoles) {
+    const newIsActive = !member.is_active;
+    // Optimistic update
     setMembers((prev) =>
-      prev.map((m) =>
-        m.id === memberId ? { ...m, is_active: !m.is_active } : m
-      )
+      prev.map((m) => (m.id === member.id ? { ...m, is_active: newIsActive } : m))
     );
+
+    if (USE_MOCK) return;
+
+    try {
+      const res = await fetch(`/api/members/${member.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: newIsActive }),
+      });
+      if (!res.ok) {
+        // Revert on failure
+        setMembers((prev) =>
+          prev.map((m) => (m.id === member.id ? { ...m, is_active: member.is_active } : m))
+        );
+      }
+    } catch {
+      setMembers((prev) =>
+        prev.map((m) => (m.id === member.id ? { ...m, is_active: member.is_active } : m))
+      );
+    }
   }
 
   async function copyLink(token: string) {
@@ -101,8 +207,28 @@ export default function AdminPeoplePage() {
     setTimeout(() => setCopiedToken(null), 2000);
   }
 
-  const activeMembers = members.filter((m) => m.is_active);
-  const inactiveMembers = members.filter((m) => !m.is_active);
+  const sortedMembers = (() => {
+    const arr = [...members];
+    arr.sort((a, b) => {
+      const dir = sortDirection === "asc" ? 1 : -1;
+      const get = (m: typeof a) => {
+        if (sortField === "name") return (m.name ?? "").toLowerCase();
+        if (sortField === "email") return (m.email ?? "").toLowerCase();
+        if (sortField === "roles") return (m.roles || []).join(",").toLowerCase();
+        if (sortField === "status") return m.is_active ? "active" : "inactive";
+        return "";
+      };
+      const aVal = get(a);
+      const bVal = get(b);
+      if (aVal > bVal) return 1 * dir;
+      if (aVal < bVal) return -1 * dir;
+      return 0;
+    });
+    return arr;
+  })();
+
+  const activeMembers = sortedMembers.filter((m) => m.is_active);
+  const inactiveMembers = sortedMembers.filter((m) => !m.is_active);
 
   return (
     <div>
@@ -122,16 +248,56 @@ export default function AdminPeoplePage() {
         </button>
       </div>
 
-      {/* Members Table */}
+      {/* Table */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Roles</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Status</th>
-              <th className="text-right px-4 py-3 font-medium text-gray-500">Actions</th>
+              <th
+                className="text-left px-4 py-3 text-gray-700 font-medium cursor-pointer select-none"
+                onClick={() => toggleSort("name")}
+                aria-sort={sortField === "name" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              >
+                <div className="flex items-center gap-2">
+                  <span>Name</span>
+                  <span className="text-xs text-gray-400">{sortField === "name" ? (sortDirection === "asc" ? "▲" : "▼") : "⇅"}</span>
+                </div>
+              </th>
+
+              <th
+                className="text-left px-4 py-3 text-gray-700 font-medium cursor-pointer select-none"
+                onClick={() => toggleSort("email")}
+                aria-sort={sortField === "email" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              >
+                <div className="flex items-center gap-2">
+                  <span>Email</span>
+                  <span className="text-xs text-gray-400">{sortField === "email" ? (sortDirection === "asc" ? "▲" : "▼") : "⇅"}</span>
+                </div>
+              </th>
+
+              <th
+                className="text-left px-4 py-3 text-gray-700 font-medium cursor-pointer select-none"
+                onClick={() => toggleSort("roles")}
+                aria-sort={sortField === "roles" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              >
+                <div className="flex items-center gap-2">
+                  <span>Roles</span>
+                  <span className="text-xs text-gray-400">{sortField === "roles" ? (sortDirection === "asc" ? "▲" : "▼") : "⇅"}</span>
+                </div>
+              </th>
+
+              <th
+                className="text-left px-4 py-3 text-gray-700 font-medium cursor-pointer select-none"
+                onClick={() => toggleSort("status")}
+                aria-sort={sortField === "status" ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+              >
+                <div className="flex items-center gap-2">
+                  <span>Status</span>
+                  <span className="text-xs text-gray-400">{sortField === "status" ? (sortDirection === "asc" ? "▲" : "▼") : "⇅"}</span>
+                </div>
+              </th>
+
+              <th className="text-right px-4 py-3 text-gray-700 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -142,18 +308,27 @@ export default function AdminPeoplePage() {
               >
                 <td className="px-4 py-3 font-medium text-gray-900">
                   {member.name}
+                  {member.app_role === "Admin" && (
+                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                      Admin
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{member.email}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1">
-                    {member.roles.map((role) => (
-                      <span
-                        key={role}
-                        className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
-                      >
-                        {ROLE_LABEL_MAP[role]}
-                      </span>
-                    ))}
+                    {member.roles.length === 0 ? (
+                      <span className="text-gray-400 text-xs">—</span>
+                    ) : (
+                      member.roles.map((role) => (
+                        <span
+                          key={role}
+                          className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
+                        >
+                          {ROLE_LABEL_MAP[role]}
+                        </span>
+                      ))
+                    )}
                   </div>
                 </td>
                 <td className="px-4 py-3">
@@ -171,111 +346,144 @@ export default function AdminPeoplePage() {
                   <div className="flex items-center justify-end gap-2">
                     <button
                       onClick={() => copyLink(member.magic_token)}
-                      className="px-2 py-1 text-xs rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-                      title="Copy availability link"
+                      className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       {copiedToken === member.magic_token ? "Copied!" : "Copy Link"}
                     </button>
-                    <button
-                      onClick={() => openEditModal(member)}
-                      className="px-2 py-1 text-xs rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => toggleActive(member.id)}
-                      className="px-2 py-1 text-xs rounded border border-gray-200 hover:bg-gray-50 transition-colors"
-                    >
-                      {member.is_active ? "Deactivate" : "Activate"}
-                    </button>
+                    {member.app_role !== "Admin" && (
+                      <button
+                        onClick={() => openEditModal(member)}
+                        className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {/* Deactivate only applies to Musician accounts */}
+                    {member.app_role !== "Admin" && (
+                      <button
+                        onClick={() => toggleActive(member)}
+                        className={`px-2 py-1 text-xs rounded border transition-colors ${
+                          member.is_active
+                            ? "border-red-300 text-red-600 hover:bg-red-50"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                        }`}
+                      >
+                        {member.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
             ))}
+            {members.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-400 text-sm">
+                  No members yet. Click &ldquo;+ Add Member&rdquo; to get started.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add / Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-[560px] max-w-full border border-gray-200 shadow-xl">
+            <h2 className="text-lg font-semibold mb-4 text-gray-900">
               {editingMember ? "Edit Member" : "Add Member"}
             </h2>
+
             <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  required
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <input
+                    required
+                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
+                    placeholder="Full name"
+                    value={form.name}
+                    onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    required
+                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
+                    placeholder="email@example.com"
+                    value={form.email}
+                    onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <input
-                  required
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
+                    placeholder="+1 (555) 000-0000"
+                    value={form.phone}
+                    onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
+                  <select
+                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800"
+                    value={form.app_role}
+                    onChange={(e) => setForm((p) => ({ ...p, app_role: e.target.value as "Admin" | "Musician" }))}
+                  >
+                    <option value="Musician">Musician</option>
+                    <option value="Admin">Admin</option>
+                  </select>
+                </div>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-                  placeholder="For Viber/SMS reminders"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Roles <span className="text-red-500">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {ROLES.map((role) => (
-                    <label
-                      key={role.value}
-                      className="flex items-center gap-2 cursor-pointer"
+                <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
+                <div className="flex flex-wrap gap-2">
+                  {ROLES.map((r) => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => toggleRole(r.value)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        form.roles.includes(r.value)
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
+                      }`}
                     >
-                      <input
-                        type="checkbox"
-                        checked={form.roles.includes(role.value)}
-                        onChange={() => toggleRole(role.value)}
-                        className="w-3.5 h-3.5 rounded border-gray-300 text-gray-900 focus:ring-gray-900"
-                      />
-                      <span className="text-sm text-gray-700">
-                        {role.label}
-                      </span>
-                    </label>
+                      {r.label}
+                    </button>
                   ))}
                 </div>
               </div>
-              <div className="flex gap-2 pt-2">
+
+              {saveError && (
+                <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-700">
+                  {saveError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
+                  disabled={isSaving}
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={form.roles.length === 0}
-                  className="flex-1 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  disabled={isSaving}
+                  className="px-4 py-2 bg-gray-900 text-white rounded disabled:opacity-50"
                 >
-                  {editingMember ? "Save Changes" : "Add Member"}
+                  {isSaving ? "Saving..." : editingMember ? "Update Member" : "Add Member"}
                 </button>
               </div>
             </form>

@@ -1,18 +1,56 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMember, updateMember, deleteMember } from "@/lib/db/members";
+import { createClient } from "@supabase/supabase-js";
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const member = await getMember(params.id);
-  return NextResponse.json(member);
-}
+const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const data = await req.json();
-  const member = await updateMember(params.id, data);
-  return NextResponse.json(member);
-}
+if (!supabaseUrl) throw new Error("Missing SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL).");
+const supabase = serviceKey ? createClient(supabaseUrl, serviceKey) : null;
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  await deleteMember(params.id);
-  return NextResponse.json({ success: true });
+export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  if (!supabase) return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 });
+  const id = (await context.params).id;
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Missing body" }, { status: 400 });
+
+  try {
+    const updateFields: any = {};
+    if (body.name !== undefined) updateFields.name = body.name;
+    if (body.email !== undefined) updateFields.email = body.email;
+    if (body.phone !== undefined) updateFields.phone = body.phone ?? null;
+    if (body.app_role !== undefined) updateFields.app_role = body.app_role;
+    if (body.is_active !== undefined) updateFields.is_active = body.is_active;
+
+    if (Object.keys(updateFields).length > 0) {
+      const { data: updated, error: updErr } = await supabase.from("members").update(updateFields).eq("id", id).select().single();
+      if (updErr) return NextResponse.json({ error: updErr.message }, { status: 500 });
+      // If roles not provided, return early
+      if (!Array.isArray(body.roles)) return NextResponse.json({ ...updated, roles: [] });
+    }
+
+    // Handle roles assignment if provided (array of role names)
+    if (Array.isArray(body.roles)) {
+      // Fetch role ids by name
+      const { data: roles } = await supabase.from("roles").select("id,name").in("name", body.roles);
+      // Remove existing assignments for member
+      await supabase.from("member_roles").delete().eq("member_id", id);
+      const rows = (roles ?? []).map((r: any) => ({ member_id: id, role_id: r.id }));
+      if (rows.length > 0) {
+        const { error: insErr } = await supabase.from("member_roles").insert(rows);
+        if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
+      }
+    }
+
+    // Return current member with roles
+    const { data: member } = await supabase.from("members").select("*").eq("id", id).single();
+    const { data: assignments } = await supabase.from("member_roles").select("role_id").eq("member_id", id);
+    const { data: allRoles } = await supabase.from("roles").select("id,name");
+    const roleMap = new Map<number, string>();
+    (allRoles ?? []).forEach((r: any) => roleMap.set(r.id, r.name));
+    const roleNames = (assignments ?? []).map((a: any) => roleMap.get(a.role_id)).filter(Boolean);
+
+    return NextResponse.json({ ...member, roles: roleNames });
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
+  }
 }

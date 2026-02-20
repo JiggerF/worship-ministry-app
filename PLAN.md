@@ -61,12 +61,12 @@ Detailed testing approach in [TEST_STRATEGY.md](./TEST_STRATEGY.md).
 
 ## Roles & Permissions
 
-| Role     | Capabilities                                                        |
+| App Role | Capabilities                                                        |
 |----------|---------------------------------------------------------------------|
 | Admin    | Full CRUD, roster assignments, lock/unlock, emergency swap, settings |
 | Musician | Submit availability (via magic link), view roster on portal, download chord PDFs |
 
-## Musician Roles (11)
+## Band Roles (11)
 
 Worship Lead, Backup Vocals 1, Backup Vocals 2, Electric Guitar, Acoustic Guitar, Bass, Keyboard, Drums, Percussion, Setup, Sound
 

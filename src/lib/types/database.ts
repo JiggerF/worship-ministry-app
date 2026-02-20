@@ -1,5 +1,31 @@
-// Database types matching Supabase schema
+// =====================================================
+// DATABASE TYPES — MUST MATCH SUPABASE SCHEMA EXACTLY
+// =====================================================
 
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+export type AppRole = "Admin" | "Musician";
+
+export type RosterStatus = "DRAFT" | "LOCKED";
+
+export type AvailabilityStatus = "AVAILABLE" | "UNAVAILABLE";
+
+export type SongStatus = "learning" | "internal_approved" | "published";
+
+export type SongCategory =
+  | "assurance_of_grace"
+  | "gospel_salvation"
+  | "call_to_worship"
+  | "praise_upbeat"
+  | "confession_repentance"
+  | "thanksgiving"
+  | "response_commitment"
+  | "communion"
+  | "adoration_worship";
+
+// Roles table values
 export type MemberRole =
   | "worship_lead"
   | "backup_vocals_1"
@@ -13,48 +39,46 @@ export type MemberRole =
   | "setup"
   | "sound";
 
-export type RosterStatus = "draft" | "locked";
-
-export type AvailabilityStatus = "available" | "unavailable";
-
-export type SongStatus = "approved" | "new_song_learning";
-
-export type SongCategory =
-  | "assurance_of_grace"
-  | "gospel_salvation"
-  | "call_to_worship"
-  | "praise_upbeat"
-  | "confession_repentance"
-  | "thanksgiving";
-
-// ── Table Row Types ──
+// ─────────────────────────────────────────────
+// BASE TABLE TYPES (mirror DB exactly)
+// ─────────────────────────────────────────────
 
 export interface Member {
   id: string;
   name: string;
   email: string;
   phone: string | null;
-  roles: MemberRole[];
+  app_role: AppRole;
   magic_token: string;
   is_active: boolean;
   created_at: string;
 }
 
+export interface Role {
+  id: number;
+  name: MemberRole;
+}
+
+export interface MemberRoleAssignment {
+  member_id: string;
+  role_id: number;
+}
+
 export interface Availability {
   id: string;
   member_id: string;
-  date: string; // ISO date string (YYYY-MM-DD)
+  date: string; // YYYY-MM-DD
   status: AvailabilityStatus;
-  preferred_role: MemberRole | null;
+  preferred_role: number | null;
   notes: string | null;
   submitted_at: string;
 }
 
 export interface RosterAssignment {
   id: string;
-  member_id: string;
-  date: string; // ISO date string (YYYY-MM-DD)
-  role: MemberRole;
+  date: string; // YYYY-MM-DD
+  role_id: number;
+  member_id: string | null;
   status: RosterStatus;
   assigned_by: string | null;
   assigned_at: string;
@@ -83,12 +107,33 @@ export interface ChordChart {
 
 export interface SetlistSong {
   id: string;
-  sunday_date: string; // ISO date string (YYYY-MM-DD)
+  sunday_date: string;
   song_id: string;
   position: number;
 }
 
-// ── Joined / View Types ──
+// ─────────────────────────────────────────────
+// JOINED / DERIVED TYPES
+// ─────────────────────────────────────────────
+
+export interface MemberWithRoles extends Member {
+  roles: MemberRole[];
+}
+
+export interface AvailabilityWithRole extends Availability {
+  role?: {
+    id: number;
+    name: MemberRole;
+  };
+}
+
+export interface RosterAssignmentWithDetails extends RosterAssignment {
+  member?: Pick<Member, "id" | "name">;
+  role: {
+    id: number;
+    name: MemberRole;
+  };
+}
 
 export interface SongWithCharts extends Song {
   chord_charts: ChordChart[];
@@ -98,14 +143,10 @@ export interface SetlistSongWithDetails extends SetlistSong {
   song: SongWithCharts;
 }
 
-export interface RosterAssignmentWithMember extends RosterAssignment {
-  member: Pick<Member, "id" | "name">;
-}
-
 export interface SundayRoster {
   date: string;
-  status: RosterStatus | "empty";
-  assignments: RosterAssignmentWithMember[];
+  status: RosterStatus | "EMPTY";
+  assignments: RosterAssignmentWithDetails[];
   setlist: SetlistSongWithDetails[];
   notes: string | null;
 }
