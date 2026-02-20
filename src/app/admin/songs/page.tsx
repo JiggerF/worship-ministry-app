@@ -15,9 +15,12 @@ const CATEGORIES = [
   "All Categories",
   "assurance_of_grace",
   "call_to_worship",
+  "communion",
   "confession_repentance",
+  "adoration_worship",
   "gospel_salvation",
   "praise_upbeat",
+  "response_commitment",
   "thanksgiving",
 ];
 
@@ -41,6 +44,9 @@ export default function AdminSongsPage() {
   const [editing, setEditing] = useState<SongWithCharts | null>(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState<SongWithCharts | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     if (useMock) return; // when using mock data we already seed with MOCK_SONGS above
@@ -49,8 +55,8 @@ export default function AdminSongsPage() {
       try {
         const res = await fetch('/api/songs');
         if (!res.ok) throw new Error('Failed to fetch songs');
-        const data: SongWithCharts[] = await res.json();
-        if (!cancelled) setSongs(data);
+        const data: unknown = await res.json();
+        if (!cancelled && Array.isArray(data)) setSongs(data as SongWithCharts[]);
       } catch (err) {
         console.warn('Could not load /api/songs, keeping local state.', err);
         if (process.env.NODE_ENV === 'development') setSongs(MOCK_SONGS);
@@ -61,7 +67,8 @@ export default function AdminSongsPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    return songs.filter((s) => {
+    const list = Array.isArray(songs) ? songs : [];
+    return list.filter((s) => {
       const q = searchQuery.trim().toLowerCase();
       const matchesQuery =
         q === "" || s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q);
@@ -91,39 +98,106 @@ export default function AdminSongsPage() {
 
   function openAdd() {
     setEditing(null);
+    setSaveError(null);
     setIsEditOpen(true);
   }
 
   function openEdit(song: SongWithCharts) {
     setEditing(song);
+    setSaveError(null);
     setIsEditOpen(true);
   }
 
-  function saveSong(payload: Partial<SongWithCharts>) {
-    if (editing) {
-      setSongs((prev) => prev.map((s) => (s.id === editing.id ? { ...s, ...payload } as SongWithCharts : s)));
-    } else {
-      const newSong: SongWithCharts = {
-        id: Date.now().toString(),
-        title: (payload.title as string) || "Untitled",
-        artist: (payload.artist as string) || null,
-        status: (payload.status as any) || "approved",
-        categories: (payload.categories as any) || null,
-        youtube_url: (payload.youtube_url as any) || null,
-        scripture_anchor: (payload.scripture_anchor as any) || null,
-        created_at: new Date().toISOString(),
-        chord_charts: (payload.chord_charts as any) ?? [],
-      };
-      setSongs((prev) => [newSong, ...prev]);
+  async function saveSong(payload: Partial<SongWithCharts>) {
+    // Mock mode: local state only
+    if (useMock) {
+      if (editing) {
+        setSongs((prev) => prev.map((s) => (s.id === editing.id ? { ...s, ...payload } as SongWithCharts : s)));
+      } else {
+        const newSong: SongWithCharts = {
+          id: Date.now().toString(),
+          title: payload.title ?? "Untitled",
+          artist: payload.artist ?? null,
+          status: payload.status ?? "approved",
+          categories: payload.categories ?? null,
+          youtube_url: payload.youtube_url ?? null,
+          scripture_anchor: payload.scripture_anchor ?? null,
+          created_at: new Date().toISOString(),
+          chord_charts: payload.chord_charts ?? [],
+        };
+        setSongs((prev) => [newSong, ...prev]);
+      }
+      setIsEditOpen(false);
+      return;
     }
-    setIsEditOpen(false);
+
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const { chord_charts, ...songFields } = payload;
+      const body = { ...songFields, chord_charts };
+
+      if (editing) {
+        const res = await fetch(`/api/songs/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to update song");
+        }
+        await res.json();
+        // Re-fetch to get joined chord_charts
+        const refreshed: unknown = await fetch('/api/songs').then((r) => r.json());
+        if (Array.isArray(refreshed)) setSongs(refreshed as SongWithCharts[]);
+      } else {
+        const res = await fetch('/api/songs', {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Failed to create song");
+        }
+        const refreshed: unknown = await fetch('/api/songs').then((r) => r.json());
+        if (Array.isArray(refreshed)) setSongs(refreshed as SongWithCharts[]);
+      }
+      setIsEditOpen(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleting) return;
-    setSongs((prev) => prev.filter((s) => s.id !== deleting.id));
-    setDeleting(null);
-    setIsDeleteOpen(false);
+
+    if (useMock) {
+      setSongs((prev) => prev.filter((s) => s.id !== deleting.id));
+      setDeleting(null);
+      setIsDeleteOpen(false);
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/songs/${deleting.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to delete song");
+      }
+      setSongs((prev) => prev.filter((s) => s.id !== deleting.id));
+      setDeleting(null);
+      setIsDeleteOpen(false);
+    } catch (err) {
+      // Show error inline in the delete dialog
+      alert(err instanceof Error ? err.message : "Failed to delete song");
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -232,7 +306,10 @@ export default function AdminSongsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-[900px] max-w-full p-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4 text-black">{editing ? "Edit Song" : "Add Song"}</h2>
-            <EditForm song={editing} onCancel={() => setIsEditOpen(false)} onSave={(p) => saveSong(p)} />
+            {saveError && (
+              <div className="mb-4 px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-700">{saveError}</div>
+            )}
+            <EditForm song={editing} isSaving={isSaving} onCancel={() => setIsEditOpen(false)} onSave={(p) => saveSong(p)} />
           </div>
         </div>
       )}
@@ -244,8 +321,10 @@ export default function AdminSongsPage() {
             <h3 className="font-semibold">Delete Song?</h3>
             <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete "{deleting.title}"? This cannot be undone.</p>
             <div className="mt-4 flex justify-end gap-2">
-              <button onClick={() => { setIsDeleteOpen(false); setDeleting(null); }} className="px-3 py-1 border rounded">Cancel</button>
-              <button onClick={confirmDelete} className="px-3 py-1 bg-red-600 text-white rounded">Delete</button>
+              <button disabled={isDeleting} onClick={() => { setIsDeleteOpen(false); setDeleting(null); }} className="px-3 py-1 border rounded">Cancel</button>
+              <button disabled={isDeleting} onClick={confirmDelete} className="px-3 py-1 bg-red-600 text-white rounded disabled:opacity-50">
+                {isDeleting ? "Deleting..." : "Delete"}
+              </button>
             </div>
           </div>
         </div>
@@ -254,7 +333,7 @@ export default function AdminSongsPage() {
   );
 }
 
-function EditForm({ song, onCancel, onSave }: { song: SongWithCharts | null; onCancel: () => void; onSave: (p: Partial<SongWithCharts>) => void }) {
+function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts | null; isSaving: boolean; onCancel: () => void; onSave: (p: Partial<SongWithCharts>) => void }) {
   const [title, setTitle] = useState(song?.title ?? "");
   const [artist, setArtist] = useState(song?.artist ?? "");
   const [status, setStatus] = useState<SongWithCharts["status"]>(song?.status ?? "approved");
@@ -329,20 +408,21 @@ function EditForm({ song, onCancel, onSave }: { song: SongWithCharts | null; onC
       </div>
 
       <div className="flex justify-end gap-2">
-        <button onClick={onCancel} className="px-3 py-1 border border-gray-300 rounded text-gray-700 bg-white">Cancel</button>
+        <button disabled={isSaving} onClick={onCancel} className="px-3 py-1 border border-gray-300 rounded text-gray-700 bg-white disabled:opacity-50">Cancel</button>
         <button
+          disabled={isSaving}
           onClick={() => {
             const chartKeys = keys.split(",").map((k) => k.trim()).filter(Boolean);
             const chord_charts = chartKeys.map((k, i) => ({ id: (Date.now() + i).toString(), song_id: song?.id ?? "new", key: k, file_url: null as string | null, storage_path: null as string | null, created_at: new Date().toISOString() }));
             if (chordFile) {
-              // create a temporary object URL for dev preview
+              // create a temporary object URL for dev preview (file upload to storage is a future task)
               chord_charts[0] = { ...chord_charts[0], file_url: URL.createObjectURL(chordFile) };
             }
             onSave({ title, artist, status, categories: [category as any], scripture_anchor: scripture, youtube_url: youtube, chord_charts });
           }}
-          className="px-3 py-1 bg-[#071027] text-white rounded"
+          className="px-3 py-1 bg-[#071027] text-white rounded disabled:opacity-50"
         >
-          {song ? "Update Song" : "Add Song"}
+          {isSaving ? "Saving..." : song ? "Update Song" : "Add Song"}
         </button>
       </div>
     </div>

@@ -20,7 +20,10 @@ export type SongCategory =
   | "call_to_worship"
   | "praise_upbeat"
   | "confession_repentance"
-  | "thanksgiving";
+  | "thanksgiving"
+  | "response_commitment"
+  | "communion"
+  | "adoration_worship";
 
 // Roles table values
 export type MemberRole =

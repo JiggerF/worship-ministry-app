@@ -7,6 +7,9 @@ export const SONG_CATEGORIES: { value: SongCategory; label: string }[] = [
   { value: "praise_upbeat", label: "Praise (Upbeat)" },
   { value: "confession_repentance", label: "Confession / Repentance" },
   { value: "thanksgiving", label: "Thanksgiving" },
+  { value: "response_commitment", label: "Response / Commitment" },
+  { value: "communion", label: "Communion" },
+  { value: "adoration_worship", label: "Adoration / Worship" },
 ];
 
 export const CATEGORY_LABEL_MAP: Record<SongCategory, string> =
