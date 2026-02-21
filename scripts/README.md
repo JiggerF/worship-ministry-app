@@ -21,7 +21,7 @@ or put these in your .env.local
 ```bash
 SUPABASE_URL=https://your-project.supabase.co \
 SUPABASE_SERVICE_ROLE_KEY=eyJ... \
-ADMIN_EMAIL=admin@wcc.org \
+ADMIN_EMAIL=0@0.org \
 ADMIN_PASSWORD='StrongPass123!' \
 node --experimental-specifier-resolution=node --loader ts-node/esm scripts/create_admin.ts
 ```
