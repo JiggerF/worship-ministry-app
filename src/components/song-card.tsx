@@ -8,7 +8,7 @@ interface SongCardProps {
 
 export function SongCard({ song }: SongCardProps) {
   return (
-    <div className="rounded-xl border-2 border-gray-200 bg-white p-5">
+    <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
 
       {/* Header: Title + Status badge */}
       <div className="flex items-start justify-between gap-3 mb-1">
@@ -52,7 +52,7 @@ export function SongCard({ song }: SongCardProps) {
             <span>🎸</span>
             Chord Charts
           </span>
-          <div className="flex-1 h-px bg-gray-100" />
+          <div className="flex-1 h-px bg-gray-200" />
         </div>
 
         {song.chord_charts.length > 0 ? (
@@ -67,9 +67,9 @@ export function SongCard({ song }: SongCardProps) {
                     href={chart.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
                   >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                       <path d="M12 3v12" />
                       <path d="M19 12l-7 7-7-7" />
                       <path d="M5 21h14" />
@@ -90,7 +90,7 @@ export function SongCard({ song }: SongCardProps) {
       {/* YouTube Link */}
       {song.youtube_url && (
         <>
-          <div className="h-px bg-gray-100 mb-3" />
+          <div className="h-px bg-gray-200 mb-3" />
           <a
             href={song.youtube_url}
             target="_blank"
