@@ -239,8 +239,11 @@ export default function AdminRosterPage() {
     );
     if (!confirmed) return;
 
+    // Save draft first
     setFinalising(true);
+    await handleSaveDraft();
 
+    // Proceed to finalise
     const res = await fetch("/api/roster", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
