@@ -9,10 +9,10 @@ interface SongCardProps {
 export function SongCard({ song }: SongCardProps) {
   return (
     <div className="rounded-xl border-2 border-gray-200 bg-white p-5">
-      {/* Header: Title + Status */}
-      <div className="flex items-start justify-between mb-1">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-1.5">
-          <span className="text-gray-400">🎵</span>
+
+      {/* Header: Title + Status badge */}
+      <div className="flex items-start justify-between gap-3 mb-1">
+        <h3 className="text-lg font-bold text-gray-900 leading-tight">
           {song.title}
         </h3>
         <SongStatusBadge status={song.status} />
@@ -20,12 +20,12 @@ export function SongCard({ song }: SongCardProps) {
 
       {/* Artist */}
       {song.artist && (
-        <p className="text-sm text-gray-500 ml-6 mb-3">{song.artist}</p>
+        <p className="text-sm text-gray-400 mb-3">{song.artist}</p>
       )}
 
       {/* Categories */}
       {song.categories && song.categories.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3 ml-6">
+        <div className="flex flex-wrap gap-1.5 mb-3">
           {song.categories.map((cat) => (
             <span
               key={cat}
@@ -39,25 +39,27 @@ export function SongCard({ song }: SongCardProps) {
 
       {/* Scripture Anchor */}
       {song.scripture_anchor && (
-        <p className="text-sm text-gray-500 mb-3 ml-6">
-          <span className="text-gray-400">📖</span>{" "}
+        <p className="text-sm text-gray-500 mb-3 flex items-center gap-1.5">
+          <span>📖</span>
           {song.scripture_anchor}
         </p>
       )}
 
       {/* Chord Charts */}
-      {song.chord_charts.length > 0 && (
-        <div className="mb-3 ml-6">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">
-            🎸 Chord Charts
-          </p>
-          <div className="space-y-1">
+      <div className="mb-3">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+            <span>🎸</span>
+            Chord Charts
+          </span>
+          <div className="flex-1 h-px bg-gray-100" />
+        </div>
+
+        {song.chord_charts.length > 0 ? (
+          <div className="space-y-2">
             {song.chord_charts.map((chart) => (
-              <div
-                key={chart.id}
-                className="flex items-center justify-between"
-              >
-                <span className="text-sm text-gray-700">
+              <div key={chart.id} className="flex items-center justify-between">
+                <span className="text-sm text-gray-700 font-medium">
                   Key of {chart.key}
                 </span>
                 {chart.file_url ? (
@@ -65,9 +67,14 @@ export function SongCard({ song }: SongCardProps) {
                     href={chart.file_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 transition-colors"
                   >
-                    ⬇ Download
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M12 3v12" />
+                      <path d="M19 12l-7 7-7-7" />
+                      <path d="M5 21h14" />
+                    </svg>
+                    Download
                   </a>
                 ) : (
                   <span className="text-xs text-gray-300">No file</span>
@@ -75,25 +82,27 @@ export function SongCard({ song }: SongCardProps) {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {song.chord_charts.length === 0 && (
-        <p className="text-sm text-gray-300 italic mb-3 ml-6">
-          No chord charts uploaded yet
-        </p>
-      )}
+        ) : (
+          <p className="text-sm text-gray-300 italic">No chord charts uploaded yet</p>
+        )}
+      </div>
 
       {/* YouTube Link */}
       {song.youtube_url && (
-        <a
-          href={song.youtube_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-6 inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
-        >
-          ▶️ Watch on YouTube
-        </a>
+        <>
+          <div className="h-px bg-gray-100 mb-3" />
+          <a
+            href={song.youtube_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-red-600 hover:text-red-800 transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            Watch on YouTube
+          </a>
+        </>
       )}
     </div>
   );
