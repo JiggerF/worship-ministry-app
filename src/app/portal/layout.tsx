@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 const NAV_TABS = [
   { href: "/portal/roster", label: "Roster" },
   { href: "/portal/songs", label: "Song Pool" },
-  { href: "#", label: "Song Poll", comingSoon: true },
   { href: "#", label: "Calendar", comingSoon: true },
 ];
 
