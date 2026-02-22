@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import jsPDF from "jspdf";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ChordChart } from "@/lib/types/database";
 import {
@@ -124,17 +125,39 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
 </html>`;
   }, [lines, songTitle, targetKey]);
 
-  // Download — saves a plain-text .txt file immediately; opens natively on iOS/Android
+  // Download — generates and saves a PDF file for the chord chart
   const handleDownload = useCallback(() => {
     const title = `${songTitle} — Key of ${targetKey}`;
-    const body = lines.map((line) => line.display).join('\n');
-    const blob = new Blob([`${title}\n\n${body}`], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${songTitle} - Key of ${targetKey}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+    let y = 50;
+    // Title: bold, large
+    doc.setFont("Courier", "bold");
+    doc.setFontSize(18);
+    doc.text(title, 40, y);
+    y += 28;
+    doc.setFontSize(12);
+    // Render each line with style
+    lines.forEach((line) => {
+      if (line.type === "empty") {
+        y += 12;
+      } else if (line.type === "section") {
+        doc.setFont("Courier", "bold");
+        doc.setTextColor(55, 65, 81); // dark gray
+        doc.text(line.display, 40, y);
+        y += 18;
+      } else if (line.type === "chord") {
+        doc.setFont("Courier", "bold");
+        doc.setTextColor(180, 83, 9); // dark amber/red
+        doc.text(line.display, 40, y);
+        y += 16;
+      } else {
+        doc.setFont("Courier", "normal");
+        doc.setTextColor(33, 37, 41); // standard dark
+        doc.text(line.display, 40, y);
+        y += 15;
+      }
+    });
+    doc.save(`${songTitle} - Key of ${targetKey}.pdf`);
   }, [lines, songTitle, targetKey]);
 
   // Print — opens a new tab and triggers the browser print dialog
