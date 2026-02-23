@@ -6,7 +6,7 @@
 // ENUMS
 // ─────────────────────────────────────────────
 
-export type AppRole = "Admin" | "Musician";
+export type AppRole = "Admin" | "Coordinator" | "Musician";
 
 export type RosterStatus = "DRAFT" | "LOCKED";
 

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "cross-env NODE_ENV=development next dev",
+    "dev:real-auth": "cross-env NODE_ENV=production next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

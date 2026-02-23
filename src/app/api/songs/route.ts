@@ -28,6 +28,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // Coordinator cannot create songs
+  const role = req.headers.get("x-app-role") || req.cookies.get("app_role")?.value;
+  if (role === "Coordinator") {
+    return NextResponse.json({ error: "Coordinator cannot create songs" }, { status: 403 });
+  }
   const body = await req.json().catch(() => null);
   if (!body || !body.title) return NextResponse.json({ error: "Missing title" }, { status: 400 });
 

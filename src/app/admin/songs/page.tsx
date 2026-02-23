@@ -1,4 +1,17 @@
+
 "use client";
+
+// Helper to get user role from localStorage/session (replace with real auth in prod)
+function useAppRole() {
+  const getInitialRole = () => {
+    if (typeof window !== "undefined") {
+      return window.localStorage.getItem("app_role") || "Admin";
+    }
+    return "Admin";
+  };
+  const [role] = useState<string>(getInitialRole);
+  return role;
+}
 
 import { useMemo, useState, useEffect } from "react";
 import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
@@ -29,6 +42,7 @@ const STATUSES = ["All Statuses", "learning", "in_review", "published"] as const
 const ITEMS_PER_PAGE = 20;
 
 export default function AdminSongsPage() {
+  const appRole = useAppRole();
   const useMock = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
   const initial = useMock ? MOCK_SONGS : ([] as SongWithCharts[]);
 
@@ -99,18 +113,21 @@ export default function AdminSongsPage() {
   }, [sorted, currentPage]);
 
   function openAdd() {
+    if (appRole === "Coordinator") return;
     setEditing(null);
     setSaveError(null);
     setIsEditOpen(true);
   }
 
   function openEdit(song: SongWithCharts) {
+    if (appRole === "Coordinator") return;
     setEditing(song);
     setSaveError(null);
     setIsEditOpen(true);
   }
 
   async function saveSong(payload: Partial<SongWithCharts>) {
+    if (appRole === "Coordinator") return;
     // Mock mode: local state only
     if (useMock) {
       if (editing) {
@@ -211,7 +228,9 @@ export default function AdminSongsPage() {
             <p className="text-sm text-gray-700">Manage worship songs and chord charts</p>
           </div>
           <div className="flex gap-3">
-            <Button onClick={openAdd} className="bg-[#071027] text-white px-4 py-2">+ Add Song</Button>
+            {appRole !== "Coordinator" && (
+              <Button onClick={openAdd} className="bg-[#071027] text-white px-4 py-2">+ Add Song</Button>
+            )}
           </div>
         </div>
 
@@ -293,8 +312,12 @@ export default function AdminSongsPage() {
                         )}</td>
                         <td className="px-3 py-3">
                           <div className="flex gap-2">
-                            <button onClick={() => openEdit(song)} className="px-3 py-1 text-sm border rounded text-gray-700 bg-white">Edit</button>
-                            <button onClick={() => { setDeleting(song); setIsDeleteOpen(true); }} className="px-3 py-1 text-sm text-red-600 border border-red-600 rounded">Delete</button>
+                            {appRole !== "Coordinator" && (
+                              <>
+                                <button onClick={() => openEdit(song)} className="px-3 py-1 text-sm border rounded text-gray-700 bg-white">Edit</button>
+                                <button onClick={() => { setDeleting(song); setIsDeleteOpen(true); }} className="px-3 py-1 text-sm text-red-600 border border-red-600 rounded">Delete</button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -315,7 +338,7 @@ export default function AdminSongsPage() {
       </div>
 
       {/* Edit / Add Modal */}
-      {isEditOpen && (
+      {isEditOpen && appRole !== "Coordinator" && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-[900px] max-w-full p-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4 text-black">{editing ? "Edit Song" : "Add Song"}</h2>

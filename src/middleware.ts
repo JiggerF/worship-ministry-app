@@ -143,7 +143,7 @@ export async function middleware(request: NextRequest) {
         const member = Array.isArray(members) ? members[0] ?? null : members;
         if (isDev) console.log('MIDDLEWARE: members fetch (fallback) ->', { member });
 
-        if (!member || member.is_active !== true || member.app_role !== 'Admin') {
+        if (!member || member.is_active !== true || (member.app_role !== 'Admin' && member.app_role !== 'Coordinator')) {
           const loginUrl = request.nextUrl.clone();
           loginUrl.pathname = '/admin/login';
           loginUrl.searchParams.set('reason', 'not_admin');
@@ -182,12 +182,32 @@ export async function middleware(request: NextRequest) {
       memberErr ||
       !member ||
       member.is_active !== true ||
-      member.app_role !== "Admin"
+      (member.app_role !== "Admin" && member.app_role !== "Coordinator")
     ) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/admin/login";
       loginUrl.searchParams.set("reason", "not_admin");
       return NextResponse.redirect(loginUrl);
+    }
+
+    // Coordinator-specific route restrictions
+    if (member.app_role === "Coordinator") {
+      const path = request.nextUrl.pathname;
+      // Block /admin/settings
+      if (path.startsWith("/admin/settings")) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/admin/roster";
+        redirectUrl.searchParams.set("reason", "no_settings_access");
+        return NextResponse.redirect(redirectUrl);
+      }
+      // Block write actions on people and songs via URL convention (e.g. /admin/people/add, /admin/songs/edit)
+      if ((path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) ||
+          (path.startsWith("/admin/songs") && /add|edit|delete/.test(path))) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = path.replace(/(add|edit|delete|deactivate).*/, "");
+        redirectUrl.searchParams.set("reason", "readonly");
+        return NextResponse.redirect(redirectUrl);
+      }
     }
   }
 

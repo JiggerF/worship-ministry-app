@@ -38,15 +38,19 @@ export default function AdminLoginPage() {
     // approach — in production you should set secure, httpOnly cookies from the
     // server after exchanging credentials.
     try {
-      const session = (res.data && res.data.session) || null;
+      let session: any = null;
+      if (res.data && typeof res.data === "object") {
+        if ('session' in res.data && res.data.session) {
+          session = res.data.session;
+        } else if ('user' in res.data && 'session' in res.data && res.data.session) {
+          session = res.data.session;
+        }
+      }
       if (session && typeof document !== "undefined") {
         const access = session.access_token;
         const refresh = session.refresh_token;
-        // Keep simple cookie flags for local testing
         document.cookie = `sb-access-token=${access}; path=/`;
         document.cookie = `sb-refresh-token=${refresh}; path=/`;
-        // Also set the serialized session cookie `sb:token` which the
-        // server-side `createServerClient` expects to reconstruct the session.
         try {
           const serialized = encodeURIComponent(JSON.stringify(session));
           document.cookie = `sb:token=${serialized}; path=/`;
