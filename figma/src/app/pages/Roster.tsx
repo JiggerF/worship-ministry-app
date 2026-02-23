@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { useState } from "react";
 import { Card, CardContent, CardHeader } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";

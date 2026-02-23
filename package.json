@@ -7,7 +7,16 @@
     "dev:real-auth": "cross-env NODE_ENV=production next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:unit": "vitest run __tests__/unit",
+    "test:components": "vitest run __tests__/components",
+    "test:integration": "vitest run __tests__/integration",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:unit": "vitest run --coverage __tests__/unit",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.0",
@@ -28,14 +37,23 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20.19.33",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
+    "@vitejs/plugin-react": "^5.1.4",
+    "@vitest/coverage-v8": "^4.0.18",
+    "@vitest/ui": "^4.0.18",
     "babel-plugin-react-compiler": "^1.0.0",
     "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "happy-dom": "^20.7.0",
+    "jsdom": "^28.1.0",
     "tailwindcss": "^4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

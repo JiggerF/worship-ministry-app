@@ -2,10 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ROSTER_COLUMN_ORDER, ROLE_LABEL_MAP, ROLES } from "@/lib/constants/roles";
-import { formatSundayDate, getSundaysInMonth, toISODate } from "@/lib/utils/dates";
+import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import { RosterBadge } from "@/components/status-badge";
 import makeDevRoster from "@/lib/mocks/devRoster";
-import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles } from "@/lib/types/database";
+import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles, RosterAssignmentWithDetails } from "@/lib/types/database";
+
+interface ApiAssignment {
+  id: string;
+  member_id: string;
+  date: string;
+  role: { id: number; name: MemberRole } | MemberRole;
+  status: RosterStatus;
+  assigned_at: string;
+  locked_at: string | null;
+  member?: { id: string; name: string };
+  members?: { id: string; name: string };
+}
+
+interface ApiRosterResponse {
+  assignments?: ApiAssignment[];
+  notes?: string;
+  error?: string;
+}
 
 const ROLE_ID_MAP: Record<MemberRole, number> = Object.fromEntries(
   ROLES.map((r, i) => [r.value, i + 1])
@@ -60,10 +78,10 @@ export default function AdminRosterPage() {
     setLoading(true);
 
     const res = await fetch(`/api/roster?month=${activeMonth}`);
-    let json: any = null;
+    let json: ApiRosterResponse | null = null;
     try {
-      json = await res.json();
-    } catch (err) {
+      json = await res.json() as ApiRosterResponse;
+    } catch {
       // empty or invalid JSON response
       json = null;
     }
@@ -87,12 +105,13 @@ export default function AdminRosterPage() {
       const iso = toISODate(dateObj);
 
       const assignments =
-        (json.assignments ?? [])
-          .filter((a: any) => a.date === iso)
-          .map((a: any) => ({
+        (json?.assignments ?? [])
+          .filter((a) => a.date === iso)
+          .map((a): RosterAssignmentWithDetails => ({
             id: a.id,
             member_id: a.member_id,
             date: a.date,
+            role_id: typeof a.role === "string" ? ROLE_ID_MAP[a.role as MemberRole] : a.role.id,
             // Normalize role shape: server mock may send a string like 'worship_lead',
             // while real DB rows include a role object { id, name } under the alias.
             role: typeof a.role === "string"
@@ -107,7 +126,7 @@ export default function AdminRosterPage() {
 
       const status: RosterStatus | "EMPTY" = assignments.length === 0
         ? "EMPTY"
-        : assignments.every((a: any) => a.status === "LOCKED")
+        : assignments.every((a) => a.status === "LOCKED")
           ? "LOCKED"
           : "DRAFT";
 
@@ -149,7 +168,7 @@ export default function AdminRosterPage() {
           const dayStatus: RosterStatus | "EMPTY" =
           dayAssignments.length === 0
             ? "EMPTY"
-            : dayAssignments.every((a: any) => a.status === "LOCKED")
+            : dayAssignments.every((a) => a.status === "LOCKED")
               ? "LOCKED"
               : "DRAFT";
 
@@ -206,7 +225,7 @@ export default function AdminRosterPage() {
       sunday.assignments.map((a) => ({
         member_id: a.member_id,
         date: a.date,
-        role_id: (a as any).role?.id ?? ROLE_ID_MAP[((a as any).role?.name) as MemberRole],
+        role_id: a.role.id ?? ROLE_ID_MAP[a.role.name as MemberRole],
       }))
     );
 
@@ -449,12 +468,12 @@ export default function AdminRosterPage() {
                                   }
 
                                   // create a new assignment for this role (client-side draft)
-                                  const newAssignment: any = {
+                                  const newAssignment: RosterAssignmentWithDetails = {
                                     id: "",
                                     role_id: ROLE_ID_MAP[role as MemberRole],
                                     member_id: memberId,
                                     date: s.date,
-                                    role: { id: ROLE_ID_MAP[role as MemberRole], name: role },
+                                    role: { id: ROLE_ID_MAP[role as MemberRole], name: role as MemberRole },
                                     status: 'DRAFT' as RosterStatus,
                                     assigned_by: null,
                                     assigned_at: new Date().toISOString(),
@@ -546,7 +565,7 @@ export default function AdminRosterPage() {
                     setIsNoteOpen(false);
                     // reload roster to pick up any changes
                     await loadRoster();
-                  } catch (err) {
+                  } catch {
                     alert('Failed to save note');
                   }
                 }}

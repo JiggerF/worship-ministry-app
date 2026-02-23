@@ -22,8 +22,9 @@ export default function AdminSettingsPage() {
         if (cancelled) return;
         setFutureMonths(json.future_months ?? 2);
         setHistoryMonths(json.history_months ?? 6);
-      } catch (err: any) {
-        setError('Failed to load settings');
+      } catch (err: unknown) {
+        const e = err as { message?: string };
+        setError(e?.message || 'Failed to load settings');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -40,8 +41,9 @@ export default function AdminSettingsPage() {
       const res = await fetch('/api/settings', { method: 'PATCH', body: JSON.stringify({ future_months: Number(futureMonths), history_months: Number(historyMonths) }), headers: { 'Content-Type': 'application/json' } });
       if (!res.ok) throw new Error('Save failed');
       alert('Settings saved');
-    } catch (err: any) {
-      setError(err?.message || 'Failed to save');
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setError(e?.message || 'Failed to save');
     } finally {
       setSaving(false);
     }

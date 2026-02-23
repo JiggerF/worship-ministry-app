@@ -116,11 +116,21 @@ export default function AdminPeoplePage() {
     setShowModal(true);
   }
 
+  function toggleRole(role: MemberRole) {
+    setForm((prev) => ({
+      ...prev,
+      roles: prev.roles.includes(role)
+        ? prev.roles.filter((r) => r !== role)
+        : [...prev.roles, role],
+    }));
+  }
+
   async function handleSave(e: React.FormEvent) {
     if (!canEdit) return;
     e.preventDefault();
     setIsSaving(true);
     setSaveError(null);
+
     try {
       const body = {
         name: form.name,
@@ -159,7 +169,7 @@ export default function AdminPeoplePage() {
       }
       setShowModal(false);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Something went wrong");
+      setSaveError(err instanceof Error ? err.message : "Save failed");
     } finally {
       setIsSaving(false);
     }
@@ -171,8 +181,6 @@ export default function AdminPeoplePage() {
     setMembers((prev) =>
       prev.map((m) => (m.id === member.id ? { ...m, is_active: newIsActive } : m))
     );
-
-    // Remove mock check, always use real API
 
     try {
       const res = await fetch(`/api/members/${member.id}`, {
@@ -198,9 +206,6 @@ export default function AdminPeoplePage() {
     await navigator.clipboard.writeText(url);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
-
-
-
   }
 
   // Use filteredMembers for rendering
@@ -364,7 +369,6 @@ export default function AdminPeoplePage() {
                           >
                             Edit
                           </button>
-                          {/* Deactivate only applies to Musician accounts */}
                           <button
                             onClick={() => toggleActive(member)}
                             className={`px-2 py-1 text-xs rounded border transition-colors ${
@@ -402,26 +406,30 @@ export default function AdminPeoplePage() {
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
               {saveError && (
-                <div className="p-3 rounded-lg bg-red-50 text-sm text-red-600">{saveError}</div>
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                  {saveError}
+                </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                 <input
-                  required
                   type="text"
+                  required
                   value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="Full name"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
                 <input
-                  required
                   type="email"
+                  required
                   value={form.email}
-                  onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="email@example.com"
                 />
               </div>
               <div>
@@ -429,16 +437,16 @@ export default function AdminPeoplePage() {
                 <input
                   type="tel"
                   value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  placeholder="Optional"
+                  placeholder="+61 4XX XXX XXX"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">App Role</label>
                 <select
                   value={form.app_role}
-                  onChange={(e) => setForm((p) => ({ ...p, app_role: e.target.value as AppRole }))}
+                  onChange={(e) => setForm((prev) => ({ ...prev, app_role: e.target.value as AppRole }))}
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 >
                   <option value="Musician">Musician</option>
@@ -449,44 +457,34 @@ export default function AdminPeoplePage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Worship Roles</label>
                 <div className="flex flex-wrap gap-2">
-                  {ROLES.map((r) => {
-                    const checked = form.roles.includes(r.value);
-                    return (
-                      <button
-                        key={r.value}
-                        type="button"
-                        onClick={() =>
-                          setForm((p) => ({
-                            ...p,
-                            roles: checked
-                              ? p.roles.filter((x) => x !== r.value)
-                              : [...p.roles, r.value],
-                          }))
-                        }
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                          checked
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "bg-white text-gray-600 border-gray-300 hover:border-gray-500"
-                        }`}
-                      >
-                        {r.label}
-                      </button>
-                    );
-                  })}
+                  {ROLES.map((r) => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => toggleRole(r.value)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        form.roles.includes(r.value)
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                  className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
                 >
                   {isSaving ? "Saving…" : editingMember ? "Save Changes" : "Add Member"}
                 </button>

@@ -64,7 +64,8 @@ export async function GET(req: NextRequest) {
   try {
     const member = await getMemberByEmail(email);
     return NextResponse.json(member);
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? String(e) }, { status: 500 });
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    return NextResponse.json({ error: err?.message ?? String(e) }, { status: 500 });
   }
 }

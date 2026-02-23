@@ -192,3 +192,83 @@ supabase status
 ```
 To create admin user for testing integration:
 scripts/README.md
+
+---
+
+# Running Tests
+
+The project uses **Vitest** with a test pyramid of unit → component → integration tests.
+**No running Supabase instance is required** — all integration tests mock Supabase completely.
+
+## Quick commands
+
+```bash
+# Run every test once (CI mode)
+npm test
+
+# Watch mode (re-runs on file save — best for local development)
+npm run test:watch
+
+# Run by layer
+npm run test:unit          # Pure utility functions only
+npm run test:components    # React component tests only
+npm run test:integration   # API route integration tests only
+
+# Coverage report (outputs to ./coverage/)
+npm run test:coverage
+
+# Visual browser UI at http://localhost:51204
+npm run test:ui
+```
+
+## Coverage report
+
+```bash
+npm run test:coverage
+open coverage/index.html   # macOS
+```
+
+The HTML report shows file-level line/branch coverage with highlighted uncovered lines.
+Coverage is also printed as a summary table in the terminal after every coverage run.
+
+**Thresholds (build fails below these):**
+
+| Metric | Minimum |
+|---|---|
+| Statements | 60% |
+| Branches | 60% |
+| Functions | 60% |
+| Lines | 60% |
+
+## Test environment notes
+
+- Tests run in **happy-dom** (not jsdom) due to an ESM compatibility issue in jsdom ≥ 28.
+- Config is in [`vitest.config.mjs`](vitest.config.mjs) (ESM format required by Vite 7).
+- Environment variables used by tests are set inside `vitest.config.mjs` → `test.env`.
+  You do **not** need a `.env.local` file to run tests.
+- The `server-only` Next.js guard is stubbed via `__tests__/__mocks__/server-only.ts`.
+
+## No seeding required for tests
+
+Unit, component, and integration tests are fully self-contained. Mock data is defined
+inline per test file. You only need a seeded local database for manual browser testing —
+see the [Initial Setup](#initial-setup) section above.
+
+## User setup (manual browser testing)
+
+To test login flows locally, you need at least one auth user linked to a member record:
+
+1. Start Supabase: `supabase start`
+2. Open Studio → http://localhost:54323 → Auth → Users → **Add user**
+   - Use **"Create user"** (not magic-link invite) to set a password for immediate login.
+3. Create the matching `members` row via the Admin panel at http://localhost:3000/admin
+   or directly in the DB:
+
+   ```sql
+   INSERT INTO public.members (name, email, app_role, magic_token, is_active)
+   VALUES ('Your Name', 'your@email.com', 'Admin', gen_random_uuid(), true);
+   ```
+
+4. For Coordinator or Musician roles, set `app_role` accordingly.
+
+For bulk user creation see [scripts/README.md](scripts/README.md).

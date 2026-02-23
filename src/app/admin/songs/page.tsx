@@ -15,7 +15,7 @@ function useAppRole() {
 
 import { useMemo, useState, useEffect } from "react";
 import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
-import type { SongWithCharts } from "@/lib/types/database";
+import type { SongWithCharts, SongCategory, SongStatus } from "@/lib/types/database";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -41,17 +41,18 @@ const STATUSES = ["All Statuses", "learning", "in_review", "published"] as const
 
 const ITEMS_PER_PAGE = 20;
 
+const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
+
 export default function AdminSongsPage() {
   const appRole = useAppRole();
-  const useMock = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
-  const initial = useMock ? MOCK_SONGS : ([] as SongWithCharts[]);
+  const initial = IS_MOCK ? MOCK_SONGS : ([] as SongWithCharts[]);
 
   const [songs, setSongs] = useState<SongWithCharts[]>(initial);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>(CATEGORIES[0]);
   const [filterStatus, setFilterStatus] = useState<string>(STATUSES[0]);
-  const [sortField, setSortField] = useState<keyof SongWithCharts>("title");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [sortField] = useState<keyof SongWithCharts>("title");
+  const [sortDirection] = useState<"asc" | "desc">("asc");
   const [currentPage, setCurrentPage] = useState(1);
 
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -63,7 +64,7 @@ export default function AdminSongsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (useMock) return; // when using mock data we already seed with MOCK_SONGS above
+    if (IS_MOCK) return;
     let cancelled = false;
     async function load() {
       try {
@@ -87,7 +88,7 @@ export default function AdminSongsPage() {
       const matchesQuery =
         q === "" || s.title.toLowerCase().includes(q) || (s.artist ?? "").toLowerCase().includes(q);
       const matchesCategory =
-        filterCategory === CATEGORIES[0] || (s.categories ?? []).includes(filterCategory as any);
+        filterCategory === CATEGORIES[0] || (s.categories ?? []).includes(filterCategory as SongCategory);
       // normalize legacy status values (internal_approved -> in_review) for UI filtering
       const songStatus = s.status === "internal_approved" ? "in_review" : s.status;
       const matchesStatus = filterStatus === STATUSES[0] || songStatus === filterStatus;
@@ -98,8 +99,8 @@ export default function AdminSongsPage() {
   const sorted = useMemo(() => {
     const arr = [...filtered];
     arr.sort((a, b) => {
-      const aVal = (a[sortField] ?? "") as any;
-      const bVal = (b[sortField] ?? "") as any;
+      const aVal = (a[sortField] ?? "") as string | number;
+      const bVal = (b[sortField] ?? "") as string | number;
       if (sortDirection === "asc") return aVal > bVal ? 1 : -1;
       return aVal < bVal ? 1 : -1;
     });
@@ -129,7 +130,7 @@ export default function AdminSongsPage() {
   async function saveSong(payload: Partial<SongWithCharts>) {
     if (appRole === "Coordinator") return;
     // Mock mode: local state only
-    if (useMock) {
+    if (IS_MOCK) {
       if (editing) {
         setSongs((prev) => prev.map((s) => (s.id === editing.id ? { ...s, ...payload } as SongWithCharts : s)));
       } else {
@@ -194,7 +195,7 @@ export default function AdminSongsPage() {
   async function confirmDelete() {
     if (!deleting) return;
 
-    if (useMock) {
+    if (IS_MOCK) {
       setSongs((prev) => prev.filter((s) => s.id !== deleting.id));
       setDeleting(null);
       setIsDeleteOpen(false);
@@ -355,7 +356,7 @@ export default function AdminSongsPage() {
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-[420px]">
             <h3 className="font-semibold">Delete Song?</h3>
-            <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete "{deleting.title}"? This cannot be undone.</p>
+          <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete &quot;{deleting.title}&quot;? This cannot be undone.</p>
             <div className="mt-4 flex justify-end gap-2">
               <button disabled={isDeleting} onClick={() => { setIsDeleteOpen(false); setDeleting(null); }} className="px-3 py-1 border rounded">Cancel</button>
               <button disabled={isDeleting} onClick={confirmDelete} className="px-3 py-1 bg-red-600 text-white rounded disabled:opacity-50">
@@ -396,7 +397,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
       <div className="grid grid-cols-3 gap-4">
         <div>
           <label className="block text-sm mb-1 text-gray-800">Status</label>
-          <select className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800" value={status} onChange={(e) => setStatus(e.target.value as any)}>
+          <select className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800" value={status} onChange={(e) => setStatus(e.target.value as SongStatus)}>
             <option value="learning">New Song – Learning</option>
             <option value="in_review">In Review</option>
             <option value="published">Published</option>
@@ -456,7 +457,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
               // create a temporary object URL for dev preview (file upload to storage is a future task)
               chord_charts[0] = { ...chord_charts[0], file_url: URL.createObjectURL(chordFile) };
             }
-            onSave({ title, artist, status, categories: [category as any], scripture_anchor: scripture, youtube_url: youtube, chord_charts });
+            onSave({ title, artist, status, categories: [category as SongCategory], scripture_anchor: scripture, youtube_url: youtube, chord_charts });
           }}
           className="px-3 py-1 bg-[#071027] text-white rounded disabled:opacity-50"
         >

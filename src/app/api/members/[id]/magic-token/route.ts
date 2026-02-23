@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateMagicToken } from "@/lib/db/members";
 
-function extractIdFromContext(context: any) {
+export async function POST(
+  req: NextRequest,
+  context: { params: Promise<{ id: string }> | { id: string } }
+) {
   const p = context?.params;
-  if (!p) return undefined;
-  if (typeof p.then === "function") {
-    return p.then((resolved: any) => resolved?.id);
-  }
-  return p.id;
-}
-
-export async function POST(req: NextRequest, context: any) {
-  const id = await extractIdFromContext(context);
+  const id: string = typeof (p as Promise<{ id: string }>).then === "function"
+    ? (await (p as Promise<{ id: string }>)).id
+    : (p as { id: string }).id;
   const token = await generateMagicToken(id);
   return NextResponse.json({ token });
 }

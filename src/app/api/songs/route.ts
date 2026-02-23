@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   // Insert chord charts if provided
   if (Array.isArray(body.chord_charts) && body.chord_charts.length > 0) {
-    const charts = body.chord_charts.map((c: any) => ({
+    const charts = body.chord_charts.map((c: { key: string; file_url?: string; storage_path?: string }) => ({
       song_id: songData.id,
       key: c.key,
       file_url: c.file_url ?? null,

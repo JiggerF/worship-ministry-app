@@ -1,4 +1,6 @@
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { createClient } = require('@supabase/supabase-js');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { randomUUID } = require('crypto');
 
 async function main() {

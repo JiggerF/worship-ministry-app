@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { SundayCard, type SundayCardRoster } from "@/components/sunday-card";
+import { SundayCard, type SundayCardRoster, type SetlistItem } from "@/components/sunday-card";
 import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import makeDevRoster from "@/lib/mocks/devRoster";
 import type { MemberRole, RosterStatus } from "@/lib/types/database";
@@ -164,7 +164,7 @@ export default function PortalRosterPage() {
 
   const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
   // Dev-only setlists keyed by ISO date (YYYY-MM-DD)
-  const [devSetlists, setDevSetlists] = useState<Record<string, any[]>>({});
+  const [devSetlists, setDevSetlists] = useState<Record<string, SetlistItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -264,7 +264,7 @@ export default function PortalRosterPage() {
         notes: null,
       };
     });
-  }, [assignments, activeMonth]);
+  }, [assignments, activeMonth, devSetlists]);
 
   /* ----------------------------- */
   /* Sort: upcoming Sunday first   */
