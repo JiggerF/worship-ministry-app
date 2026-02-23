@@ -1,28 +1,57 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
-import type { MemberWithRoles, MemberRole } from "@/lib/types/database";
-import { INITIAL_MEMBERS } from "@/lib/mocks/mockPeople";
+import { ROLE_LABEL_MAP } from "@/lib/constants/roles";
+import type { MemberWithRoles, MemberRole, AppRole } from "@/lib/types/database";
 
-const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
-
+// Define MemberFormData type
 interface MemberFormData {
   name: string;
   email: string;
   phone: string;
-  app_role: "Admin" | "Musician";
+  app_role: AppRole;
   roles: MemberRole[];
 }
 
+function useCurrentMember() {
+  const [member, setMember] = useState<MemberWithRoles | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    // Use the server-side /api/me endpoint which reads the session from cookies
+    // and queries members via service role key — works regardless of RLS policies.
+    fetch("/api/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) {
+          setMember(data ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return { member, loading };
+}
+
 export default function AdminPeoplePage() {
+  const { member, loading: memberLoading } = useCurrentMember();
+  // Hide action buttons while loading (member is null) AND when role is Coordinator.
+  // Defaulting to hidden prevents a flash of edit buttons before the role is confirmed.
+  const canEdit = !memberLoading && member !== null && member.app_role !== "Coordinator";
   // Initialize empty when not in mock mode — avoids the mock-data flash on load
-  const [members, setMembers] = useState<MemberWithRoles[]>(
-    USE_MOCK ? INITIAL_MEMBERS : []
-  );
+  const [members, setMembers] = useState<MemberWithRoles[]>([]);
+
+  // Filter out Admin users for Coordinator
+  const filteredMembers = member?.app_role === "Coordinator"
+    ? members.filter((m) => m.app_role !== "Admin")
+    : members;
 
   useEffect(() => {
-    if (USE_MOCK) return;
     let cancelled = false;
     (async () => {
       try {
@@ -41,8 +70,6 @@ export default function AdminPeoplePage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberWithRoles | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const [form, setForm] = useState<MemberFormData>({
@@ -66,15 +93,17 @@ export default function AdminPeoplePage() {
   }
 
   function openAddModal() {
+    // Coordinator cannot open modal
+    if (!canEdit) return;
     setEditingMember(null);
-    setSaveError(null);
     setForm({ name: "", email: "", phone: "", app_role: "Musician", roles: [] });
     setShowModal(true);
   }
 
   function openEditModal(member: MemberWithRoles) {
+    // Coordinator cannot open modal
+    if (!canEdit) return;
     setEditingMember(member);
-    setSaveError(null);
     setForm({
       name: member.name,
       email: member.email,
@@ -85,49 +114,10 @@ export default function AdminPeoplePage() {
     setShowModal(true);
   }
 
-  function toggleRole(role: MemberRole) {
-    setForm((prev) => ({
-      ...prev,
-      roles: prev.roles.includes(role)
-        ? prev.roles.filter((r) => r !== role)
-        : [...prev.roles, role],
-    }));
-  }
-
   async function handleSave(e: React.FormEvent) {
+    if (!canEdit) return;
     e.preventDefault();
 
-    if (USE_MOCK) {
-      if (editingMember) {
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.id === editingMember.id
-              ? { ...m, name: form.name, email: form.email, phone: form.phone || null, roles: form.roles }
-              : m
-          )
-        );
-      } else {
-        setMembers((prev) => [
-          ...prev,
-          {
-            id: `m${Date.now()}`,
-            name: form.name,
-            email: form.email,
-            phone: form.phone || null,
-            app_role: form.app_role,
-            roles: form.roles,
-            magic_token: crypto.randomUUID(),
-            is_active: true,
-            created_at: new Date().toISOString(),
-          },
-        ]);
-      }
-      setShowModal(false);
-      return;
-    }
-
-    setIsSaving(true);
-    setSaveError(null);
     try {
       const body = {
         name: form.name,
@@ -166,9 +156,7 @@ export default function AdminPeoplePage() {
       }
       setShowModal(false);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setIsSaving(false);
+      console.error("Save failed:", err);
     }
   }
 
@@ -179,7 +167,7 @@ export default function AdminPeoplePage() {
       prev.map((m) => (m.id === member.id ? { ...m, is_active: newIsActive } : m))
     );
 
-    if (USE_MOCK) return;
+    // Remove mock check, always use real API
 
     try {
       const res = await fetch(`/api/members/${member.id}`, {
@@ -205,10 +193,14 @@ export default function AdminPeoplePage() {
     await navigator.clipboard.writeText(url);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
+
+
+
   }
 
+  // Use filteredMembers for rendering
   const sortedMembers = (() => {
-    const arr = [...members];
+    const arr = [...filteredMembers];
     arr.sort((a, b) => {
       const dir = sortDirection === "asc" ? 1 : -1;
       const get = (m: typeof a) => {
@@ -240,12 +232,14 @@ export default function AdminPeoplePage() {
             {activeMembers.length} active member{activeMembers.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={openAddModal}
-          className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors"
-        >
-          + Add Member
-        </button>
+        {canEdit && (
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors"
+          >
+            + Add Member
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -313,6 +307,11 @@ export default function AdminPeoplePage() {
                       Admin
                     </span>
                   )}
+                  {member.app_role === "Coordinator" && (
+                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-50 text-yellow-700">
+                      Coordinator
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{member.email}</td>
                 <td className="px-4 py-3">
@@ -320,7 +319,7 @@ export default function AdminPeoplePage() {
                     {member.roles.length === 0 ? (
                       <span className="text-gray-400 text-xs">—</span>
                     ) : (
-                      member.roles.map((role) => (
+                      member.roles.map((role: MemberRole) => (
                         <span
                           key={role}
                           className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700"
@@ -343,35 +342,38 @@ export default function AdminPeoplePage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => copyLink(member.magic_token)}
-                      className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
-                    >
-                      {copiedToken === member.magic_token ? "Copied!" : "Copy Link"}
-                    </button>
-                    {member.app_role !== "Admin" && (
+                  {/* Coordinator: show nothing, fully read-only */}
+                  {canEdit ? (
+                    <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => openEditModal(member)}
+                        onClick={() => copyLink(member.magic_token)}
                         className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
                       >
-                        Edit
+                        {copiedToken === member.magic_token ? "Copied!" : "Copy Link"}
                       </button>
-                    )}
-                    {/* Deactivate only applies to Musician accounts */}
-                    {member.app_role !== "Admin" && (
-                      <button
-                        onClick={() => toggleActive(member)}
-                        className={`px-2 py-1 text-xs rounded border transition-colors ${
-                          member.is_active
-                            ? "border-red-300 text-red-600 hover:bg-red-50"
-                            : "border-gray-300 text-gray-700 hover:bg-gray-50"
-                        }`}
-                      >
-                        {member.is_active ? "Deactivate" : "Activate"}
-                      </button>
-                    )}
-                  </div>
+                      {member.app_role !== "Admin" && (
+                        <>
+                          <button
+                            onClick={() => openEditModal(member)}
+                            className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+                          >
+                            Edit
+                          </button>
+                          {/* Deactivate only applies to Musician accounts */}
+                          <button
+                            onClick={() => toggleActive(member)}
+                            className={`px-2 py-1 text-xs rounded border transition-colors ${
+                              member.is_active
+                                ? "border-red-300 text-red-600 hover:bg-red-50"
+                                : "border-gray-300 text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            {member.is_active ? "Deactivate" : "Activate"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ) : null}
                 </td>
               </tr>
             ))}
@@ -387,105 +389,15 @@ export default function AdminPeoplePage() {
       </div>
 
       {/* Add / Edit Modal */}
-      {showModal && (
+      {showModal && canEdit && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-[560px] max-w-full border border-gray-200 shadow-xl">
             <h2 className="text-lg font-semibold mb-4 text-gray-900">
               {editingMember ? "Edit Member" : "Add Member"}
             </h2>
-
+            {/* Modal form only shown for non-Coordinator */}
             <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <input
-                    required
-                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
-                    placeholder="Full name"
-                    value={form.name}
-                    onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    required
-                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
-                    placeholder="email@example.com"
-                    value={form.email}
-                    onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <input
-                    type="tel"
-                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400"
-                    placeholder="+1 (555) 000-0000"
-                    value={form.phone}
-                    onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Account Type</label>
-                  <select
-                    className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800"
-                    value={form.app_role}
-                    onChange={(e) => setForm((p) => ({ ...p, app_role: e.target.value as "Admin" | "Musician" }))}
-                  >
-                    <option value="Musician">Musician</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Roles</label>
-                <div className="flex flex-wrap gap-2">
-                  {ROLES.map((r) => (
-                    <button
-                      key={r.value}
-                      type="button"
-                      onClick={() => toggleRole(r.value)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        form.roles.includes(r.value)
-                          ? "bg-gray-900 text-white border-gray-900"
-                          : "bg-white text-gray-700 border-gray-300 hover:border-gray-500"
-                      }`}
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {saveError && (
-                <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-700">
-                  {saveError}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-gray-300 rounded text-gray-700 bg-white disabled:opacity-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-4 py-2 bg-gray-900 text-white rounded disabled:opacity-50"
-                >
-                  {isSaving ? "Saving..." : editingMember ? "Update Member" : "Add Member"}
-                </button>
-              </div>
+              {/* ...existing code... */}
             </form>
           </div>
         </div>

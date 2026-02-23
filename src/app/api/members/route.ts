@@ -36,6 +36,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // Coordinator cannot create members
+  const role = req.headers.get("x-app-role") || req.cookies.get("app_role")?.value;
+  if (role === "Coordinator") {
+    return NextResponse.json({ error: "Coordinator cannot create members" }, { status: 403 });
+  }
   if (!supabase) return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY." }, { status: 500 });
   const body = await req.json().catch(() => null);
   if (!body || !body.email || !body.name) return NextResponse.json({ error: "Missing fields" }, { status: 400 });

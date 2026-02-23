@@ -1,3 +1,4 @@
+
 import type { MemberWithRoles } from "@/lib/types/database";
 
 export const INITIAL_MEMBERS: MemberWithRoles[] = [
@@ -46,6 +47,17 @@ export const INITIAL_MEMBERS: MemberWithRoles[] = [
     created_at: "",
     roles: [],
   },
+  {
+    id: "coordinator1",
+    name: "Alona",
+    email: "coordinator@test.com",
+    phone: null,
+    app_role: "Coordinator",
+    magic_token: "coordinator-token-001",
+    is_active: true,
+    created_at: "",
+    roles: [],
+  }
 ];
 
 // Simple dev credentials used by the mock auth client. Can be overridden
