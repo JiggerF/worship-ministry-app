@@ -89,7 +89,11 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/songs", label: "Songs", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
+  { href: "/admin/audit", label: "Audit Log", icon: "🔍" },
 ];
+
+// Pages that Coordinators cannot access
+const COORDINATOR_HIDDEN = ["/admin/settings", "/admin/audit"];
 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -101,9 +105,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <>{children}</>;
   }
 
-  // Hide Settings nav for Coordinator
+  // Hide Settings and Audit Log nav for Coordinator
   const filteredSidebar = member?.app_role === "Coordinator"
-    ? SIDEBAR_ITEMS.filter((item) => item.href !== "/admin/settings")
+    ? SIDEBAR_ITEMS.filter((item) => !COORDINATOR_HIDDEN.includes(item.href))
     : SIDEBAR_ITEMS;
 
   return (
