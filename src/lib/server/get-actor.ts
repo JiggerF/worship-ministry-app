@@ -19,6 +19,15 @@ export interface AuditActor {
 export async function getActorFromRequest(
   req: NextRequest
 ): Promise<AuditActor | null> {
+  // Dev bypass: if dev_auth=1 cookie is present, return a synthetic Admin actor
+  // (mirrors the same bypass in middleware.ts)
+  if (process.env.NODE_ENV === "development") {
+    const devAuth = req.cookies.get("dev_auth")?.value;
+    if (devAuth === "1") {
+      return { id: "dev", name: "Dev Admin", role: "Admin" };
+    }
+  }
+
   if (!supabaseUrl || !serviceKey) return null;
 
   const token = req.cookies.get("sb-access-token")?.value;

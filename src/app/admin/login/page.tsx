@@ -62,7 +62,7 @@ export default function AdminLoginPage() {
       // ignore cookie set errors
     }
 
-    // Ensure middleware + SSR re-evaluate auth state
+    // Ensure middleware + SSR re-evaluate auth state.
     router.replace("/admin/roster");
     router.refresh();
   }

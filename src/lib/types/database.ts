@@ -6,11 +6,13 @@
 // ENUMS
 // ─────────────────────────────────────────────
 
-export type AppRole = "Admin" | "Coordinator" | "Musician";
+export type AppRole = "Admin" | "Coordinator" | "Musician" | "MusicCoordinator" | "WorshipLeader";
 
 export type RosterStatus = "DRAFT" | "LOCKED";
 
 export type AvailabilityStatus = "AVAILABLE" | "UNAVAILABLE";
+
+export type SetlistStatus = "DRAFT" | "PUBLISHED";
 
 export type SongStatus = "learning" | "internal_approved" | "published";
 
@@ -107,9 +109,14 @@ export interface ChordChart {
 
 export interface SetlistSong {
   id: string;
-  sunday_date: string;
+  sunday_date: string;       // YYYY-MM-DD
   song_id: string;
-  position: number;
+  position: number;          // 1–3
+  chosen_key: string | null; // null → fall back to chord_charts[0].key at display/PDF time
+  status: SetlistStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ─────────────────────────────────────────────

@@ -86,6 +86,7 @@ function useCurrentMember() {
 
 const SIDEBAR_ITEMS = [
   { href: "/admin/roster", label: "Roster", icon: "📋" },
+  { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
   { href: "/admin/songs", label: "Songs", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
