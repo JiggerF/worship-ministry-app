@@ -38,7 +38,7 @@ export default function AdminLoginPage() {
     // approach — in production you should set secure, httpOnly cookies from the
     // server after exchanging credentials.
     try {
-      let session: any = null;
+      let session: { access_token?: string; refresh_token?: string } | null = null;
       if (res.data && typeof res.data === "object") {
         if ('session' in res.data && res.data.session) {
           session = res.data.session;

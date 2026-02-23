@@ -2,6 +2,35 @@ import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 
+// ─────────────────────────────────────────────
+// Local row types (mirror Supabase query shapes)
+// ─────────────────────────────────────────────
+
+interface RoleRow { id: number; name: string; }
+interface MemberAssignmentRow { roles?: { name: string } | null; }
+
+interface MemberRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  app_role: string;
+  magic_token: string;
+  is_active: boolean;
+  created_at: string;
+  member_role_assignments?: MemberAssignmentRow[];
+}
+
+export interface MemberPayload {
+  name?: string;
+  email?: string;
+  phone?: string | null;
+  app_role?: string;
+  magic_token?: string;
+  is_active?: boolean;
+  roles?: string[];
+}
+
 const supabaseUrl =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 
@@ -27,7 +56,7 @@ async function getRoleIds(roleNames: string[]): Promise<number[]> {
     .select("id, name")
     .in("name", roleNames);
   if (error) throw error;
-  return (data ?? []).map((r: any) => r.id as number);
+  return (data as RoleRow[] ?? []).map((r) => r.id);
 }
 
 async function saveRoleAssignments(memberId: string, roleNames: string[]) {
@@ -76,11 +105,12 @@ export async function getMemberByMagicToken(token: string) {
     .eq("magic_token", token)
     .single();
 
-  if (error || !data || !(data as any).is_active) return null;
+  const row = data as { id: string; name: string; is_active: boolean } | null;
+  if (error || !row || !row.is_active) return null;
 
   return {
-    id: (data as any).id as string,
-    name: (data as any).name as string,
+    id: row.id,
+    name: row.name,
   };
 }
 
@@ -130,10 +160,10 @@ export async function upsertAvailability(
 // CRUD — used by API routes
 // ─────────────────────────────────────────────
 
-function extractRoles(row: any): string[] {
-  return (row.member_role_assignments ?? [])
-    .map((a: any) => a.roles?.name)
-    .filter(Boolean);
+function extractRoles(row: MemberRow | null): string[] {
+  return (row?.member_role_assignments ?? [])
+    .map((a: MemberAssignmentRow) => a.roles?.name)
+    .filter(Boolean) as string[];
 }
 
 export async function getMembers() {
@@ -146,7 +176,7 @@ export async function getMembers() {
 
   if (error) throw error;
 
-  return (data ?? []).map((row: any) => ({
+  return ((data ?? []) as unknown as MemberRow[]).map((row) => ({
     id: row.id,
     name: row.name,
     email: row.email,
@@ -159,7 +189,7 @@ export async function getMembers() {
   }));
 }
 
-export async function createMember(payload: Partial<any>) {
+export async function createMember(payload: MemberPayload) {
   const { roles: roleNames, ...memberData } = payload;
 
   const { data, error } = await supabase
@@ -173,7 +203,7 @@ export async function createMember(payload: Partial<any>) {
 
   if (error) throw error;
 
-  const member = data as any;
+  const member = data as MemberRow;
   if (Array.isArray(roleNames) && roleNames.length > 0) {
     await saveRoleAssignments(member.id, roleNames);
   }
@@ -191,7 +221,7 @@ export async function getMember(id: string) {
     .single();
 
   if (error) throw error;
-  return { ...(data as any), roles: extractRoles(data) };
+  return { ...(data as unknown as MemberRow), roles: extractRoles(data as unknown as MemberRow) };
 }
 
 export async function getMemberByEmail(email: string) {
@@ -202,10 +232,10 @@ export async function getMemberByEmail(email: string) {
     .single();
 
   if (error) throw error;
-  return { ...(data as any), roles: [] };
+  return { ...(data as MemberRow), roles: [] as string[] };
 }
 
-export async function updateMember(id: string, changes: Partial<any>) {
+export async function updateMember(id: string, changes: Partial<MemberPayload>) {
   const { roles: roleNames, ...memberData } = changes;
 
   const { data, error } = await supabase
@@ -221,7 +251,7 @@ export async function updateMember(id: string, changes: Partial<any>) {
     await saveRoleAssignments(id, roleNames);
   }
 
-  return { ...(data as any), roles: roleNames ?? [] };
+  return { ...(data as MemberRow), roles: roleNames ?? [] };
 }
 
 export async function deleteMember(id: string) {

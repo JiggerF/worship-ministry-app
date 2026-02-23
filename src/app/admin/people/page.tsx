@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ROLE_LABEL_MAP } from "@/lib/constants/roles";
+import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
 import type { MemberWithRoles, MemberRole, AppRole } from "@/lib/types/database";
 
 // Define MemberFormData type
@@ -71,6 +71,8 @@ export default function AdminPeoplePage() {
   const [showModal, setShowModal] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberWithRoles | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const [form, setForm] = useState<MemberFormData>({
     name: "",
@@ -114,9 +116,20 @@ export default function AdminPeoplePage() {
     setShowModal(true);
   }
 
+  function toggleRole(role: MemberRole) {
+    setForm((prev) => ({
+      ...prev,
+      roles: prev.roles.includes(role)
+        ? prev.roles.filter((r) => r !== role)
+        : [...prev.roles, role],
+    }));
+  }
+
   async function handleSave(e: React.FormEvent) {
     if (!canEdit) return;
     e.preventDefault();
+    setIsSaving(true);
+    setSaveError(null);
 
     try {
       const body = {
@@ -156,7 +169,9 @@ export default function AdminPeoplePage() {
       }
       setShowModal(false);
     } catch (err) {
-      console.error("Save failed:", err);
+      setSaveError(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -397,7 +412,90 @@ export default function AdminPeoplePage() {
             </h2>
             {/* Modal form only shown for non-Coordinator */}
             <form onSubmit={handleSave} className="space-y-4">
-              {/* ...existing code... */}
+              {saveError && (
+                <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                  {saveError}
+                </div>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={form.name}
+                  onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                  className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="Full name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                  className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="email@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="+63 9XX XXX XXXX"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">App Role</label>
+                <select
+                  value={form.app_role}
+                  onChange={(e) => setForm((prev) => ({ ...prev, app_role: e.target.value as AppRole }))}
+                  className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                >
+                  <option value="Musician">Musician</option>
+                  <option value="Coordinator">Coordinator</option>
+                  <option value="Admin">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Worship Roles</label>
+                <div className="flex flex-wrap gap-2">
+                  {ROLES.map((r) => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => toggleRole(r.value)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        form.roles.includes(r.value)
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-600 border-gray-300 hover:border-gray-500"
+                      }`}
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium transition-colors disabled:opacity-60"
+                >
+                  {isSaving ? "Saving…" : editingMember ? "Save Changes" : "Add Member"}
+                </button>
+              </div>
             </form>
           </div>
         </div>

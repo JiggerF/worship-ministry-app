@@ -121,18 +121,22 @@ async function getMemberRoles(memberId: string) {
 /* GET                           */
 /* ----------------------------- */
 
-function extractTokenFromContext(context: any) {
+type RouteContext = { params: Promise<{ token: string }> | { token: string } };
+
+function extractTokenFromContext(context: RouteContext) {
   const p = context?.params;
   if (!p) return undefined;
-  if (typeof p.then === "function") {
-    // params is a Promise
-    return p.then((resolved: any) => resolved?.token);
+  if (typeof (p as Promise<{ token: string }>).then === "function") {
+    return (p as Promise<{ token: string }>).then((resolved) => resolved?.token);
   }
-  return p.token;
+  return (p as { token: string }).token;
 }
 
-export async function GET(req: NextRequest, context: any) {
+export async function GET(req: NextRequest, context: RouteContext) {
   const token = await extractTokenFromContext(context);
+  if (!token) {
+    return NextResponse.json({ error: "Invalid token" }, { status: 404 });
+  }
   const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   if (!targetMonth) {
@@ -208,8 +212,11 @@ export async function GET(req: NextRequest, context: any) {
 /* POST                          */
 /* ----------------------------- */
 
-export async function POST(req: NextRequest, context: any) {
+export async function POST(req: NextRequest, context: RouteContext) {
   const token = await extractTokenFromContext(context);
+  if (!token) {
+    return NextResponse.json({ error: "Invalid token" }, { status: 404 });
+  }
   const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   if (!targetMonth) {

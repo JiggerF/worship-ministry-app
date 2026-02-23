@@ -14,7 +14,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   if (!body) return NextResponse.json({ error: "Missing body" }, { status: 400 });
 
   try {
-    const updateFields: any = {};
+    const updateFields: Record<string, unknown> = {};
     if (body.name !== undefined) updateFields.name = body.name;
     if (body.email !== undefined) updateFields.email = body.email;
     if (body.phone !== undefined) updateFields.phone = body.phone ?? null;
@@ -34,7 +34,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       const { data: roles } = await supabase.from("roles").select("id,name").in("name", body.roles);
       // Remove existing assignments for member
       await supabase.from("member_roles").delete().eq("member_id", id);
-      const rows = (roles ?? []).map((r: any) => ({ member_id: id, role_id: r.id }));
+      const rows = (roles ?? []).map((r: { id: number }) => ({ member_id: id, role_id: r.id }));
       if (rows.length > 0) {
         const { error: insErr } = await supabase.from("member_roles").insert(rows);
         if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
@@ -46,11 +46,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     const { data: assignments } = await supabase.from("member_roles").select("role_id").eq("member_id", id);
     const { data: allRoles } = await supabase.from("roles").select("id,name");
     const roleMap = new Map<number, string>();
-    (allRoles ?? []).forEach((r: any) => roleMap.set(r.id, r.name));
-    const roleNames = (assignments ?? []).map((a: any) => roleMap.get(a.role_id)).filter(Boolean);
+    (allRoles ?? []).forEach((r: { id: number; name: string }) => roleMap.set(r.id, r.name));
+    const roleNames = (assignments ?? []).map((a: { role_id: number }) => roleMap.get(a.role_id)).filter(Boolean);
 
     return NextResponse.json({ ...member, roles: roleNames });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return NextResponse.json({ error: e?.message ?? String(err) }, { status: 500 });
   }
 }

@@ -48,7 +48,7 @@ export default function AvailabilityForm({
         setLockout(data.lockout || null);
 
         const existing = new Set<string>();
-        (data.availability || []).forEach((row: any) => {
+        (data.availability || []).forEach((row: { status: string; date: string }) => {
           if (row.status === 'AVAILABLE') {
             existing.add(row.date);
           }

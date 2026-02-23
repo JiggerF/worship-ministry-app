@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, startTransition } from "react";
 import jsPDF from "jspdf";
 import * as Dialog from "@radix-ui/react-dialog";
 import type { ChordChart } from "@/lib/types/database";
@@ -9,7 +9,6 @@ import {
   normalizeKey,
   semitonesBetween,
   parseChordSheet,
-  type ParsedLine,
 } from "@/lib/utils/transpose";
 
 interface ChordSheetModalProps {
@@ -20,6 +19,19 @@ interface ChordSheetModalProps {
   onKeyChange?: (key: string) => void;
   /** The trigger element — wrapped in Dialog.Trigger */
   children: React.ReactNode;
+}
+
+// External link icon (reused in two places)
+function ExternalLinkIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24"
+      fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+      <polyline points="15 3 21 3 21 9" />
+      <line x1="10" y1="14" x2="21" y2="3" />
+    </svg>
+  );
 }
 
 export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: ChordSheetModalProps) {
@@ -42,8 +54,10 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
   useEffect(() => {
     if (!open || !sourceChart.file_url || rawText !== null) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
+    startTransition(() => {
+      setLoading(true);
+      setError(null);
+    });
     fetch(`/api/chord-sheet?url=${encodeURIComponent(sourceChart.file_url)}`, {
       signal: controller.signal,
     })
@@ -75,9 +89,10 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
   }, [onKeyChange]);
 
   const semitones = semitonesBetween(normalizeKey(sourceChart.key), targetKey);
-  const lines: ParsedLine[] = rawText
-    ? parseChordSheet(rawText, semitones, targetKey)
-    : [];
+  const lines = useMemo(
+    () => (rawText ? parseChordSheet(rawText, semitones, targetKey) : []),
+    [rawText, semitones, targetKey],
+  );
 
   // Shared HTML builder used by both Download and Print
   const buildHtml = useCallback((withAutoprint: boolean): string => {
@@ -181,17 +196,7 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
     setRawText(null);
   }, []);
 
-  // External link icon (reused in two places)
-  const ExternalLinkIcon = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-      <polyline points="15 3 21 3 21 9" />
-      <line x1="10" y1="14" x2="21" y2="3" />
-    </svg>
-  );
-
+  // External link icon is defined above the component as a named function
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>{children}</Dialog.Trigger>

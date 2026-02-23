@@ -9,10 +9,11 @@ export async function GET(req: NextRequest) {
   try {
     const member = await getMemberByEmail(email);
     return NextResponse.json(member);
-  } catch (e: any) {
-    if (e && e.code === "PGRST116") {
+  } catch (e: unknown) {
+    const err = e as { code?: string; message?: string };
+    if (err?.code === "PGRST116") {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
-    return NextResponse.json({ error: e?.message ?? String(e) }, { status: 500 });
+    return NextResponse.json({ error: err?.message ?? String(e) }, { status: 500 });
   }
 }

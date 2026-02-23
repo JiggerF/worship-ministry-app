@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, Suspense } from "react";
 
 export const dynamic = "force-dynamic";
-import { useSearchParams } from "next/navigation";
 import { ROLES } from "@/lib/constants/roles";
 import { getSundaysInMonth, formatDateDMY } from "@/lib/utils/dates";
 import type { MemberRole } from "@/lib/types/database";

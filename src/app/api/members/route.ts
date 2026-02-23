@@ -18,20 +18,21 @@ export async function GET() {
     ]);
 
     const roleMap = new Map<number, string>();
-    (roles ?? []).forEach((r: any) => roleMap.set(r.id, r.name));
+    (roles ?? []).forEach((r: { id: number; name: string }) => roleMap.set(r.id, r.name));
 
     const memberRoles = new Map<string, string[]>();
-    (assignments ?? []).forEach((a: any) => {
+    (assignments ?? []).forEach((a: { member_id: string; role_id: number }) => {
       const arr = memberRoles.get(a.member_id) ?? [];
       const roleName = roleMap.get(a.role_id) ?? null;
       if (roleName) arr.push(roleName);
       memberRoles.set(a.member_id, arr);
     });
 
-    const result = (members ?? []).map((m: any) => ({ ...m, roles: memberRoles.get(m.id) ?? [] }));
+    const result = (members ?? []).map((m: { id: string }) => ({ ...m, roles: memberRoles.get(m.id) ?? [] }));
     return NextResponse.json(result);
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return NextResponse.json({ error: e?.message ?? String(err) }, { status: 500 });
   }
 }
 
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
     // Handle role assignments if provided (array of role names)
     if (Array.isArray(body.roles) && body.roles.length > 0) {
       const { data: roles } = await supabase.from("roles").select("id,name").in("name", body.roles);
-      const rows = (roles ?? []).map((r: any) => ({ member_id: created.id, role_id: r.id }));
+      const rows = (roles ?? []).map((r: { id: number; name: string }) => ({ member_id: created.id, role_id: r.id }));
       if (rows.length > 0) {
         const { error: arErr } = await supabase.from("member_roles").insert(rows);
         if (arErr) return NextResponse.json({ error: arErr.message }, { status: 500 });
@@ -73,11 +74,12 @@ export async function POST(req: NextRequest) {
     const { data: assignments } = await supabase.from("member_roles").select("role_id").eq("member_id", created.id);
     const { data: allRoles } = await supabase.from("roles").select("id,name");
     const roleMap = new Map<number, string>();
-    (allRoles ?? []).forEach((r: any) => roleMap.set(r.id, r.name));
-    const roleNames = (assignments ?? []).map((a: any) => roleMap.get(a.role_id)).filter(Boolean);
+    (allRoles ?? []).forEach((r: { id: number; name: string }) => roleMap.set(r.id, r.name));
+    const roleNames = (assignments ?? []).map((a: { role_id: number }) => roleMap.get(a.role_id)).filter(Boolean);
 
     return NextResponse.json({ ...created, roles: roleNames });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message ?? String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    const e = err as { message?: string };
+    return NextResponse.json({ error: e?.message ?? String(err) }, { status: 500 });
   }
 }

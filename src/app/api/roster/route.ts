@@ -133,7 +133,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    const assignments = (data ?? []).map((row: any) => ({
+    const assignments = (data ?? []).map((row: { id: string; date: string; member_id: string; status: string; roles: unknown; members: unknown }) => ({
       id: row.id,
       date: row.date,
       member_id: row.member_id,
@@ -146,21 +146,21 @@ export async function GET(req: NextRequest) {
     const noteKey = `roster_note:${monthParam}`;
     let note = null;
     try {
-      const noteRes: any = await supabase
+      const noteRes = await supabase
         .from("app_settings")
         .select("value")
         .eq("key", noteKey)
         .limit(1)
         .single();
       note = noteRes?.data?.value?.notes ?? null;
-    } catch (e) {
+    } catch {
       note = null;
     }
 
     return NextResponse.json({ assignments, notes: note }, { status: 200, headers: { "x-dev-roster": "false" } });
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err?.message ?? String(err) },
+      { error: err instanceof Error ? err.message : String(err) },
       { status: 500 }
     );
   }
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const payload = body.assignments.map((a: any) => ({
+  const payload = body.assignments.map((a: { date: string; role_id: number; member_id: string | null }) => ({
     date: a.date,
     role_id: a.role_id,
     member_id: a.member_id ?? null,
