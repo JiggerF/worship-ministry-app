@@ -150,3 +150,26 @@ export interface SundayRoster {
   setlist: SetlistSongWithDetails[];
   notes: string | null;
 }
+
+// ─── Audit Log ───────────────────────────────────────────────────────────────
+
+export type AuditAction =
+  | "create_song"
+  | "update_song"
+  | "delete_song"
+  | "save_roster_draft"
+  | "finalize_roster"
+  | "revert_roster"
+  | "save_roster_note";
+
+export interface AuditLogRow {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_name: string;
+  actor_role: string;
+  action: AuditAction;
+  entity_type: string;
+  entity_id: string | null;
+  summary: string;
+}
