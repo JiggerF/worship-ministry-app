@@ -70,9 +70,9 @@ export default function AdminPeoplePage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberWithRoles | null>(null);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
   const [form, setForm] = useState<MemberFormData>({
     name: "",
@@ -95,17 +95,17 @@ export default function AdminPeoplePage() {
   }
 
   function openAddModal() {
-    // Coordinator cannot open modal
     if (!canEdit) return;
     setEditingMember(null);
+    setSaveError(null);
     setForm({ name: "", email: "", phone: "", app_role: "Musician", roles: [] });
     setShowModal(true);
   }
 
   function openEditModal(member: MemberWithRoles) {
-    // Coordinator cannot open modal
     if (!canEdit) return;
     setEditingMember(member);
+    setSaveError(null);
     setForm({
       name: member.name,
       email: member.email,
@@ -182,8 +182,6 @@ export default function AdminPeoplePage() {
       prev.map((m) => (m.id === member.id ? { ...m, is_active: newIsActive } : m))
     );
 
-    // Remove mock check, always use real API
-
     try {
       const res = await fetch(`/api/members/${member.id}`, {
         method: "PUT",
@@ -208,9 +206,6 @@ export default function AdminPeoplePage() {
     await navigator.clipboard.writeText(url);
     setCopiedToken(token);
     setTimeout(() => setCopiedToken(null), 2000);
-
-
-
   }
 
   // Use filteredMembers for rendering
@@ -374,7 +369,6 @@ export default function AdminPeoplePage() {
                           >
                             Edit
                           </button>
-                          {/* Deactivate only applies to Musician accounts */}
                           <button
                             onClick={() => toggleActive(member)}
                             className={`px-2 py-1 text-xs rounded border transition-colors ${
@@ -410,7 +404,6 @@ export default function AdminPeoplePage() {
             <h2 className="text-lg font-semibold mb-4 text-gray-900">
               {editingMember ? "Edit Member" : "Add Member"}
             </h2>
-            {/* Modal form only shown for non-Coordinator */}
             <form onSubmit={handleSave} className="space-y-4">
               {saveError && (
                 <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
@@ -446,7 +439,7 @@ export default function AdminPeoplePage() {
                   value={form.phone}
                   onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  placeholder="+63 9XX XXX XXXX"
+                  placeholder="+61 4XX XXX XXX"
                 />
               </div>
               <div>

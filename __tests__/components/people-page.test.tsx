@@ -82,7 +82,7 @@ describe("AdminPeoplePage — Add Member modal", () => {
     // All text inputs present
     expect(screen.getByPlaceholderText("Full name")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("email@example.com")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("+63 9XX XXX XXXX")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("+61 4XX XXX XXX")).toBeInTheDocument();
 
     // App role select with all three options
     expect(screen.getByRole("combobox")).toBeInTheDocument();
