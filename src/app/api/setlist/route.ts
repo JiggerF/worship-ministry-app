@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
 import { getSetlist, upsertSetlistSong } from "@/lib/db/setlist";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
 import type { AppRole } from "@/lib/types/database";
 
 const SETLIST_ROLES: AppRole[] = ["Admin", "Coordinator", "MusicCoordinator", "WorshipLeader"];
@@ -73,8 +74,22 @@ export async function POST(req: NextRequest) {
       song_id,
       position,
       chosen_key: chosen_key ?? null,
-      created_by: UUID_RE.test(actor.id) ? actor.id : null,
+      created_by: UUID_RE.test(actor.id ?? "") ? actor.id : null,
     });
+
+    // Audit: fire-and-forget pattern (swallow errors — audit must never break primary ops)
+    try {
+      await createAuditLogEntry({
+        actor_id: actor.id ?? null,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "update_setlist",
+        entity_type: "setlist",
+        entity_id: sunday_date,
+        summary: `Updated setlist for ${sunday_date} (position ${position})`,
+      });
+    } catch { /* intentionally swallow */ }
+
     return NextResponse.json(row, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

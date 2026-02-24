@@ -167,7 +167,11 @@ export type AuditAction =
   | "save_roster_draft"
   | "finalize_roster"
   | "revert_roster"
-  | "save_roster_note";
+  | "save_roster_note"
+  | "update_setlist"
+  | "delete_setlist_song"
+  | "publish_setlist"
+  | "revert_setlist";
 
 export interface AuditLogRow {
   id: string;

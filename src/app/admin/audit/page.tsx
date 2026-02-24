@@ -56,6 +56,10 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   finalize_roster: "Finalized roster",
   revert_roster: "Reverted roster",
   save_roster_note: "Updated note",
+  update_setlist: "Updated setlist",
+  delete_setlist_song: "Removed song from setlist",
+  publish_setlist: "Published setlist",
+  revert_setlist: "Reverted setlist to draft",
 };
 
 const ACTION_COLORS: Record<AuditAction, string> = {
@@ -66,6 +70,10 @@ const ACTION_COLORS: Record<AuditAction, string> = {
   finalize_roster: "bg-purple-100 text-purple-800",
   revert_roster: "bg-orange-100 text-orange-800",
   save_roster_note: "bg-sky-100 text-sky-800",
+  update_setlist: "bg-amber-100 text-amber-800",
+  delete_setlist_song: "bg-red-100 text-red-800",
+  publish_setlist: "bg-purple-100 text-purple-800",
+  revert_setlist: "bg-orange-100 text-orange-800",
 };
 
 export default function AuditPage() {

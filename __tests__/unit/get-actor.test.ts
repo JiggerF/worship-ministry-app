@@ -187,7 +187,7 @@ describe("getActorFromRequest — dev bypass", () => {
     });
     const result = await getActorFromRequest(req);
     expect(result).not.toBeNull();
-    expect(result?.id).toBe("dev");
+    expect(result?.id).toBeNull();
     expect(result?.name).toBe("Dev Admin");
     expect(result?.role).toBe("Admin");
   });

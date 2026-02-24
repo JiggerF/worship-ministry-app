@@ -155,7 +155,14 @@ export default function AdminSongsPage() {
     setSaveError(null);
     try {
       const { chord_charts, ...songFields } = payload;
-      const body = { ...songFields, chord_charts };
+      // Map UI status "in_review" back to DB enum "internal_approved"
+      const normalizedFields = {
+        ...songFields,
+        ...(songFields.status === ("in_review" as string)
+          ? { status: "internal_approved" as const }
+          : {}),
+      };
+      const body = { ...normalizedFields, chord_charts };
 
       if (editing) {
         const res = await fetch(`/api/songs/${editing.id}`, {
