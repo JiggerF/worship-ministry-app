@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
+import { getActorFromRequest } from "@/lib/server/get-actor";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -60,6 +62,25 @@ export async function POST(req: NextRequest) {
     }));
     const { error: chartsErr } = await supabase.from("chord_charts").insert(charts);
     if (chartsErr) return NextResponse.json({ error: chartsErr.message }, { status: 500 });
+  }
+
+  // Await audit before returning — fire-and-forget .then() is dropped by serverless
+  // runtimes that terminate immediately after the response is sent.
+  try {
+    const actor = await getActorFromRequest(req);
+    if (actor) {
+      await createAuditLogEntry({
+        actor_id: actor.id,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "create_song",
+        entity_type: "song",
+        entity_id: songData.id,
+        summary: `Created song '${songData.title}'`,
+      });
+    }
+  } catch {
+    // Intentionally swallow — audit must never break the primary operation
   }
 
   return NextResponse.json({ success: true, song: songData });

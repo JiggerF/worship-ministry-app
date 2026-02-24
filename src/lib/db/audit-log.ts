@@ -26,12 +26,25 @@ const PAGE_SIZE = 50;
 export async function createAuditLogEntry(
   entry: CreateAuditLogEntry
 ): Promise<void> {
-  if (!supabaseUrl || !serviceKey) return;
+  if (!supabaseUrl || !serviceKey) {
+    console.error("[audit] createAuditLogEntry: missing env vars — entry not written", {
+      action: entry.action,
+    });
+    return;
+  }
   try {
     const supabase = createClient(supabaseUrl, serviceKey);
-    await supabase.from("audit_log").insert(entry);
-  } catch {
-    // Intentionally silent
+    const { error } = await supabase.from("audit_log").insert(entry);
+    if (error) {
+      console.error("[audit] createAuditLogEntry: Supabase insert failed", {
+        action: entry.action,
+        error: error.message,
+        code: error.code,
+      });
+    }
+  } catch (err) {
+    // Intentionally swallow thrown exceptions — audit must never break primary ops
+    console.error("[audit] createAuditLogEntry: unexpected exception", err);
   }
 }
 

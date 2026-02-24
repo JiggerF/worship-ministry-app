@@ -200,6 +200,13 @@ export async function middleware(request: NextRequest) {
         redirectUrl.searchParams.set("reason", "no_settings_access");
         return NextResponse.redirect(redirectUrl);
       }
+      // Block /admin/audit (Admin-only page)
+      if (path.startsWith("/admin/audit")) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/admin/roster";
+        redirectUrl.searchParams.set("reason", "no_audit_access");
+        return NextResponse.redirect(redirectUrl);
+      }
       // Block write actions on people and songs via URL convention (e.g. /admin/people/add, /admin/songs/edit)
       if ((path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) ||
           (path.startsWith("/admin/songs") && /add|edit|delete/.test(path))) {

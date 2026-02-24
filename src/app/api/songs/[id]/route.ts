@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
+import { getActorFromRequest } from "@/lib/server/get-actor";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -46,15 +48,56 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     }
   }
 
+  // Await audit before returning — fire-and-forget .then() is dropped by serverless
+  // runtimes that terminate immediately after the response is sent.
+  try {
+    const actor = await getActorFromRequest(req);
+    if (actor) {
+      await createAuditLogEntry({
+        actor_id: actor.id,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "update_song",
+        entity_type: "song",
+        entity_id: id,
+        summary: `Updated song '${songData.title}'`,
+      });
+    }
+  } catch {
+    // Intentionally swallow — audit must never break the primary operation
+  }
+
   return NextResponse.json({ success: true, song: songData });
 }
 
-export async function DELETE(_req: NextRequest, { params }: RouteContext) {
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
   const { id } = await params;
+
+  // Fetch title before deleting for the audit summary
+  const { data: existing } = await supabase.from("songs").select("title").eq("id", id).single();
 
   // chord_charts will cascade delete via FK constraint
   const { error } = await supabase.from("songs").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  // Await audit before returning — fire-and-forget .then() is dropped by serverless
+  // runtimes that terminate immediately after the response is sent.
+  try {
+    const actor = await getActorFromRequest(req);
+    if (actor) {
+      await createAuditLogEntry({
+        actor_id: actor.id,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "delete_song",
+        entity_type: "song",
+        entity_id: id,
+        summary: `Deleted song '${(existing as { title?: string } | null)?.title ?? id}'`,
+      });
+    }
+  } catch {
+    // Intentionally swallow — audit must never break the primary operation
+  }
 
   return NextResponse.json({ success: true });
 }

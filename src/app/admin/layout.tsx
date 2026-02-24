@@ -1,91 +1,36 @@
 "use client";
-// Explicit interface for mock auth client
-interface MockAuthClient {
-  session: () => { user?: { email?: string } };
-}
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import supabase from "@/lib/supabase";
 import type { Member } from "@/lib/types/database";
-
-// ...existing code...
 
 function useCurrentMember() {
   const [member, setMember] = useState<Member | null>(null);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    async function fetchMember() {
-      let user: { email?: string } | null = null;
-      // Check for getUser (real supabase client)
-      if (
-        supabase.auth &&
-        typeof (supabase.auth as { getUser?: () => Promise<{ data?: { user?: { email?: string } } }> }).getUser === "function"
-      ) {
-        const { data } = await (supabase.auth as { getUser: () => Promise<{ data?: { user?: { email?: string } } }> }).getUser();
-        user = data?.user || null;
-      } else if (
-        supabase.auth &&
-        typeof (supabase.auth as unknown as MockAuthClient).session === "function"
-      ) {
-        const session = (supabase.auth as unknown as MockAuthClient).session();
-        user = session?.user || null;
-      }
-      if (!user || typeof user.email !== "string") {
-        setMember(null);
-        return;
-      }
-      // Fetch member info from DB by email
-      let data: Member | null = null;
-      let error: unknown = null;
-      if (
-        typeof (supabase as unknown as { from?: (table: string) => { select: (fields: string) => { eq: (field: string, value: string) => { single: () => Promise<{ data: Member | null; error: unknown }> } } } }).from === "function"
-      ) {
-        const result = await (supabase as unknown as { from: (table: string) => { select: (fields: string) => { eq: (field: string, value: string) => { single: () => Promise<{ data: Member | null; error: unknown }> } } } }).from("members")
-          .select("id, name, app_role")
-          .eq("email", user.email)
-          .single();
-        data = result.data;
-        error = result.error;
-      }
-      if (!cancelled) {
-        if (!error && data) setMember(data);
-        else setMember(null);
-      }
-    }
-    fetchMember();
-    // Listen for auth state changes
-    let unsubscribe: (() => void) | undefined;
-    if (
-      supabase.auth &&
-      typeof (supabase.auth as { onAuthStateChange?: (cb: () => void) => { data?: { subscription?: { unsubscribe?: () => void } } } }).onAuthStateChange === "function"
-    ) {
-      const { data: listener } = (supabase.auth as { onAuthStateChange: (cb: () => void) => { data?: { subscription?: { unsubscribe?: () => void } } } }).onAuthStateChange(() => {
-        fetchMember();
+    fetch("/api/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) {
+          setMember(data ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
       });
-      if (
-        listener &&
-        listener.subscription &&
-        typeof listener.subscription.unsubscribe === "function"
-      ) {
-        unsubscribe = () => {
-          if (listener.subscription && typeof listener.subscription.unsubscribe === "function") {
-            listener.subscription.unsubscribe();
-          }
-        };
-      }
-    }
     return () => {
       cancelled = true;
-      if (unsubscribe) unsubscribe();
     };
   }, []);
-  return member;
+  return { member, loading };
 }
 
 const SIDEBAR_ITEMS = [
   { href: "/admin/roster", label: "Roster", icon: "📋" },
+  { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
   { href: "/admin/songs", label: "Songs", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
@@ -98,15 +43,15 @@ const COORDINATOR_HIDDEN = ["/admin/settings", "/admin/audit"];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const member = useCurrentMember();
+  const { member, loading: memberLoading } = useCurrentMember();
 
   // Don't show sidebar on login page
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
 
-  // Hide Settings and Audit Log nav for Coordinator
-  const filteredSidebar = member?.app_role === "Coordinator"
+  // Hide Settings and Audit Log nav for Coordinator (only filter once role is confirmed)
+  const filteredSidebar = !memberLoading && member?.app_role === "Coordinator"
     ? SIDEBAR_ITEMS.filter((item) => !COORDINATOR_HIDDEN.includes(item.href))
     : SIDEBAR_ITEMS;
 
@@ -148,7 +93,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
             <div>
               {/* Show logged-in user's name and role tag */}
-              {member ? (
+              {memberLoading ? (
+                <p className="text-sm font-medium text-gray-400">—</p>
+              ) : member ? (
                 <>
                   <p className="text-sm font-medium text-gray-900">
                     {member.name} <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">{member.app_role}</span>
@@ -161,15 +108,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                   </Link>
                 </>
               ) : (
-                <>
-                  <p className="text-sm font-medium text-gray-900">Loading...</p>
-                  <Link
-                    href="/admin/login"
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Sign out
-                  </Link>
-                </>
+                <Link
+                  href="/admin/login"
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Sign out
+                </Link>
               )}
             </div>
           </div>

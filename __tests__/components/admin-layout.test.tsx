@@ -7,6 +7,7 @@
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/admin/layout";
 
 // ── Mock next/navigation ──────────────────────────────────────────────────────
@@ -31,39 +32,24 @@ vi.mock("next/link", () => ({
   ),
 }));
 
-// ── Build Supabase mock via vi.hoisted ────────────────────────────────────────
-const { mockGetUser, mockSingle, mockSupabase } = vi.hoisted(() => {
-  const mockGetUser = vi.fn();
-  const mockSingle = vi.fn();
-
-  const chain = {
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    single: mockSingle,
-  };
-
-  const mockSupabase = {
-    auth: { getUser: mockGetUser, onAuthStateChange: vi.fn(() => ({ data: {} })) },
-    from: vi.fn(() => chain),
-  };
-
-  return { mockGetUser, mockSingle, mockSupabase };
-});
-
-vi.mock("@/lib/supabase", () => ({ default: mockSupabase }));
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Stubs global fetch to return the given member from /api/me */
 function setupMember(app_role: string) {
-  mockGetUser.mockResolvedValue({
-    data: { user: { email: "user@wcc.org" } },
-  });
-  mockSingle.mockResolvedValue({
-    data: { id: "member-1", name: "Test User", app_role },
-    error: null,
-  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "member-1", name: "Test User", app_role }),
+    })
+  );
+}
+
+/** Stubs fetch so /api/me never resolves (simulates loading) */
+function setupMemberLoading() {
+  vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
 }
 
 function renderLayout() {
@@ -80,14 +66,18 @@ function renderLayout() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
+  // Reset usePathname to the default so the login page test's mock doesn't leak
+  vi.mocked(usePathname).mockReturnValue("/admin/roster");
 });
 
 describe("AdminLayout — Admin nav", () => {
-  it("shows all 5 nav links for Admin role", async () => {
+  it("shows all 6 nav links for Admin role", async () => {
     setupMember("Admin");
     renderLayout();
-    // All five pages must be present
+    // All six pages must be present
     expect(await screen.findByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /setlist/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /songs/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /people/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
@@ -110,11 +100,12 @@ describe("AdminLayout — Admin nav", () => {
 });
 
 describe("AdminLayout — Coordinator nav", () => {
-  it("shows Roster, Songs, People but NOT Settings or Audit Log", async () => {
+  it("shows Roster, Setlist, Songs, People but NOT Settings or Audit Log", async () => {
     setupMember("Coordinator");
     renderLayout();
 
     await screen.findByRole("link", { name: /roster/i });
+    expect(screen.getByRole("link", { name: /setlist/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /songs/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /people/i })).toBeInTheDocument();
 
@@ -124,28 +115,28 @@ describe("AdminLayout — Coordinator nav", () => {
     });
   });
 
-  it("shows exactly 3 nav links for Coordinator", async () => {
+  it("shows exactly 4 nav links for Coordinator", async () => {
     setupMember("Coordinator");
     renderLayout();
     await screen.findByRole("link", { name: /roster/i });
     await waitFor(() => {
-      // Only the 3 allowed nav links (excludes Sign out link counted separately)
+      // 4 allowed nav links: Roster, Setlist, Songs, People (excludes Settings, Audit Log, and Sign out)
       const navLinks = screen
         .getAllByRole("link")
         .filter((el) =>
-          ["/admin/roster", "/admin/songs", "/admin/people"].includes(
+          ["/admin/roster", "/admin/setlist", "/admin/songs", "/admin/people"].includes(
             el.getAttribute("href") ?? ""
           )
         );
-      expect(navLinks).toHaveLength(3);
+      expect(navLinks).toHaveLength(4);
     });
   });
 });
 
 describe("AdminLayout — loading state", () => {
   it("shows all nav links while member is loading (defaults to showing all)", () => {
-    // Don't resolve getUser so member stays null/loading
-    mockGetUser.mockReturnValue(new Promise(() => {}));
+    // Fetch never resolves, so member stays null and loading stays true
+    setupMemberLoading();
     renderLayout();
     // Before member loads, Coordinator filter hasn't applied — all items visible
     expect(screen.getByRole("link", { name: /roster/i })).toBeInTheDocument();
@@ -155,13 +146,80 @@ describe("AdminLayout — loading state", () => {
 });
 
 describe("AdminLayout — login page", () => {
-  it("does not render the sidebar on /admin/login", async () => {
-    const { usePathname } = await import("next/navigation");
-    (usePathname as ReturnType<typeof vi.fn>).mockReturnValue("/admin/login");
-    mockGetUser.mockResolvedValue({ data: { user: null } });
+  it("does not render the sidebar on /admin/login", () => {
+    vi.mocked(usePathname).mockReturnValue("/admin/login");
+    setupMember("Admin");
     renderLayout();
     expect(screen.queryByRole("link", { name: /roster/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
     expect(screen.getByText("page content")).toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Profile section — sidebar bottom (regression guard for /api/me fix)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("AdminLayout — profile section", () => {
+  it("shows the member name after /api/me resolves", async () => {
+    setupMember("Admin");
+    renderLayout();
+    expect(await screen.findByText("Test User")).toBeInTheDocument();
+  });
+
+  it("shows the role badge next to the member name", async () => {
+    setupMember("Admin");
+    renderLayout();
+    await screen.findByText("Test User");
+    // Role badge is rendered as a <span> alongside the name
+    expect(screen.getByText("Admin")).toBeInTheDocument();
+  });
+
+  it("shows the role badge for Coordinator role", async () => {
+    setupMember("Coordinator");
+    renderLayout();
+    await screen.findByText("Test User");
+    expect(screen.getByText("Coordinator")).toBeInTheDocument();
+  });
+
+  it("shows '—' placeholder while /api/me is still loading", () => {
+    setupMemberLoading();
+    renderLayout();
+    expect(screen.getByText("—")).toBeInTheDocument();
+    // 'Loading...' must NOT appear — that was the old broken behaviour
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+  });
+
+  it("shows the Sign out link after member data loads", async () => {
+    setupMember("Admin");
+    renderLayout();
+    const signOut = await screen.findByRole("link", { name: /sign out/i });
+    expect(signOut).toBeInTheDocument();
+    expect(signOut).toHaveAttribute("href", "/admin/login");
+  });
+
+  it("shows Sign out link (without name) when /api/me returns non-ok", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, json: async () => null })
+    );
+    renderLayout();
+    // Wait for loading state to finish (— disappears once setLoading(false) fires)
+    await waitFor(() =>
+      expect(screen.queryByText("—")).not.toBeInTheDocument()
+    );
+    expect(screen.queryByText("Test User")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /sign out/i })).toBeInTheDocument();
+  });
+
+  it("shows Sign out link when /api/me fetch throws a network error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    renderLayout();
+    // Wait for loading state to finish (catch handler calls setLoading(false))
+    await waitFor(() =>
+      expect(screen.queryByText("—")).not.toBeInTheDocument()
+    );
+    expect(screen.queryByText("Test User")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /sign out/i })).toBeInTheDocument();
   });
 });
