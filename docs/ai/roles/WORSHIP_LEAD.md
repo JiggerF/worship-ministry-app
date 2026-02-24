@@ -43,9 +43,8 @@ The Worship Coordinator / Music Coordinator / Worship Leader **cannot** modify t
 - `"WorshipLeader"` and `"MusicCoordinator"` in the TypeScript `AppRole` type
 - `sunday_setlist` DB table
 - Setlist API routes (`GET`, `POST`, `DELETE`, `PATCH /publish`)
-- `/wl/` auth area + middleware guard for `WorshipLeader` and `MusicCoordinator`
-- Coordinator access to `/wl/` routes for song selection
-- Song selection UI in "pick mode"
+- Middleware allowance for `MusicCoordinator` and `WorshipLeader` into `/admin/*` with read-only restrictions (block Settings, Audit; allow Roster/People/Songs read; allow Setlist full)
+- Song selection UI in "pick mode" on `/admin/songs?date=...&picking=1`
 - Combined multi-song client-side PDF download page
 - Published setlist displayed on portal roster cards
 
@@ -63,31 +62,34 @@ export type AppRole = "Admin" | "Coordinator" | "Musician" | "MusicCoordinator" 
 ```
 
 #### `Coordinator` (Worship Coordinator)
-- Primary workspace: `/admin/` — full roster management, people, songs (read)
-- Can ALSO access `/wl/roster` and `/wl/songs` for song selection on their Sundays
+- Primary workspace: `/admin/` — full roster management, people, songs (read), setlist management
 - Login redirect: `/admin/roster` (existing, unchanged)
-- Song selection: navigates to `/wl/roster` from a link/banner
+- Song selection: via `/admin/songs?date=...&picking=1`
 
 #### `MusicCoordinator`
-- Access: `/wl/` area only — no admin panel
-- Login redirect: `/wl/roster`
-- Song selection: via `/wl/songs` pick mode (same as WorshipLeader)
+- Primary workspace: `/admin/` (read-only for Roster/People/Songs) — Setlist is full management; Settings and Audit are blocked
+- Login redirect: `/admin/roster`
+- Song selection: via `/admin/songs?date=...&picking=1`
+- Cannot modify the member roster grid (who plays what instrument) — Roster page is strictly read-only
 
 #### `WorshipLeader`
-- Access: `/wl/` area only — no admin panel
-- Login redirect: `/wl/roster`
-- Song selection: via `/wl/songs` pick mode
+- Primary workspace: `/admin/` (read-only for Roster/People/Songs) — Setlist is full management; Settings and Audit are blocked
+- Login redirect: `/admin/roster`
+- Song selection: via `/admin/songs?date=...&picking=1`
+- Cannot modify the member roster grid (who plays what instrument) — Roster page is strictly read-only
 
 ### Permission matrix
 
+> Legend: ✅ full access — ✅ ro read-only — ❌ blocked
+
 | Route | Admin | Coordinator | MusicCoordinator | WorshipLeader | Musician |
 |---|:---:|:---:|:---:|:---:|:---:|
-| `/admin/roster` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `/admin/people` | ✅ | ✅ | ❌ | ❌ | ❌ |
-| `/admin/songs` | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `/admin/roster` | ✅ | ✅ | ✅ ro | ✅ ro | ❌ |
+| `/admin/people` | ✅ | ✅ ro | ✅ ro | ✅ ro | ❌ |
+| `/admin/songs` | ✅ | ✅ ro | ✅ ro | ✅ ro | ❌ |
+| `/admin/setlist` | ✅ | ✅ | ✅ | ✅ | ❌ |
 | `/admin/settings` | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `/wl/roster` | — | ✅ (secondary) | ✅ | ✅ | ❌ |
-| `/wl/songs` | — | ✅ (secondary) | ✅ | ✅ | ❌ |
+| `/admin/audit` | ✅ | ❌ | ❌ | ❌ | ❌ |
 | `/portal/*` | public | public | public | public | public |
 | `POST /api/setlist` | ✅ | ✅ | ✅ | ✅ | ❌ |
 | `PATCH /api/setlist/publish` | ✅ | ✅ | ✅ | ✅ | ❌ |
@@ -192,31 +194,29 @@ const SETLIST_ROLES: AppRole[] = ["Admin", "Coordinator", "MusicCoordinator", "W
 | Role | Login page | Post-login redirect |
 |---|---|---|
 | Coordinator | `/admin/login` | `/admin/roster` (existing) |
-| MusicCoordinator | `/admin/login` | `/wl/roster` (new) |
-| WorshipLeader | `/admin/login` | `/wl/roster` (new) |
+| MusicCoordinator | `/admin/login` | `/admin/roster` (read-only view) |
+| WorshipLeader | `/admin/login` | `/admin/roster` (read-only view) |
 
-Coordinators can reach `/wl/roster` by clicking a "Song Selection" link in their admin sidebar or by navigating directly. It is not their primary view but is accessible.
+All roles land on `/admin/roster`. Roster management controls are hidden for `MusicCoordinator` and `WorshipLeader` — they see the roster as read-only and use the Setlist section for song selection.
 
 ### 2. Roster view — spotting "my" Sunday
 
-**WorshipLeader / MusicCoordinator** (via `/wl/roster`):
-- Month roster cards (same visual language as portal `SundayCard`)
-- Page fetches `/api/me` to get their own `member_id` (never direct RLS queries — see MEMORY.md)
+**All worship-leading roles** (via `/admin/roster`):
+- Page fetches `/api/me` to get the caller's `member_id` and `app_role`
 - Any Sunday where their `member_id` appears in the `worship_lead` slot gets a "Your Sunday" badge
-- Songs section states:
-  - Empty → "No songs chosen yet — Tap to select songs" CTA
-  - Draft saved → 3 songs listed + **DRAFT** badge (amber) + "Edit songs" button
-  - Published → 3 songs listed + **PUBLISHED** badge (green) + "Edit songs" button
+- **MusicCoordinator / WorshipLeader:** All roster grid edit controls hidden (no "Assign member" dropdowns, no draft/publish roster buttons) — read-only view
+- **Coordinator / Admin:** Full roster management controls visible as normal
 
-**Coordinator** (via `/wl/roster` as secondary view):
-- Same experience as above, but they arrived from admin
-- Their primary roster management remains at `/admin/roster` (unmodified)
+**Songs section states** (visible to all worship-leading roles on their own Sundays):
+- Empty → "No songs chosen yet — Select songs" CTA linking to `/admin/songs?date=...&picking=1`
+- Draft saved → 3 songs listed + **DRAFT** badge (amber) + "Edit songs" button
+- Published → 3 songs listed + **PUBLISHED** badge (green) + "Edit songs" button
 
-**All roles:** Cards for Sundays they are NOT the worship_lead show songs as read-only.
+**All roles:** Songs section on Sundays they are NOT the worship_lead shows songs as read-only (published only).
 
 ### 3. Song selection — "pick mode"
 
-Tapping "Add songs" (or "Edit songs") navigates to `/wl/songs?date=YYYY-MM-DD&picking=1`.
+Tapping "Add songs" (or "Edit songs") navigates to `/admin/songs?date=YYYY-MM-DD&picking=1`.
 
 The song pool page enters **pick mode**: a sticky selection tray appears at the bottom (mobile-first):
 
@@ -235,7 +235,7 @@ The song pool page enters **pick mode**: a sticky selection tray appears at the 
 - All 3 slots filled → + is disabled (greyed)
 - Already selected → + becomes **× (remove)**
 - Re-entering edit mode → tray pre-loads existing draft from `GET /api/setlist?date=`
-
+- All worship-leading roles access pick mode through the same `/admin/songs` page; pick mode activates only when `?picking=1&date=` params are present
 ### 4. Key selection per song
 
 - Each filled tray slot shows a key chip (default: `chord_charts[0].key`, or "No key" if no chart)
@@ -246,7 +246,7 @@ The song pool page enters **pick mode**: a sticky selection tray appears at the 
 ### 5. Saving songs
 
 - "Done — Save songs for [date]" → `POST /api/setlist` for each slot (upsert by `sunday_date + position`)
-- Navigator returns to `/wl/roster`; Songs section shows 3 songs + **DRAFT** badge
+- Navigator returns to `/admin/roster`; Songs section shows 3 songs + **DRAFT** badge
 - "Edit songs" re-enters pick mode with existing selections pre-loaded
 
 ### 6. Publishing
@@ -268,7 +268,7 @@ Songs section action buttons (WL's own Sundays only):
 
 ### 8. Combined PDF download (musicians + worship leaders)
 
-Route: `/portal/print/[date]` (public) and `/wl/print/[date]` (authenticated)
+Route: `/portal/print/[date]` (public) and `/admin/print/[date]` (authenticated)
 
 - **Client-side page** — runs in the browser using existing jsPDF infrastructure
 - Fetches chord sheet `file_url` for each of the 3 songs directly (same as `ChordSheetModal`)
@@ -298,55 +298,58 @@ Route: `/portal/print/[date]` (public) and `/wl/print/[date]` (authenticated)
    - `DELETE /api/setlist/[id]` → deletes; requires `SETLIST_ROLES`
    - `PATCH /api/setlist/[date]/publish` → sets PUBLISHED; requires `SETLIST_ROLES`
 
-**What stays the same:** All `/admin`, `/portal`, `/wl` routes unchanged. `SundayCard` still receives empty `setlist: []`.
+**What stays the same:** All `/admin` and `/portal` routes unchanged. `SundayCard` still receives empty `setlist: []`.
 
 **Tests:** Unit tests for `setlist.ts` DB helpers; integration tests for all 4 routes (including role auth rejection for Musician).
 
 ---
 
-### MVP 2 — WL auth area + Coordinator access to `/wl/`
-**Goal:** WorshipLeader and MusicCoordinator can log in and land on `/wl/roster`. Coordinator can also visit `/wl/roster`.
+### MVP 2 — Admin access for MusicCoordinator + WorshipLeader
+**Goal:** Both `MusicCoordinator` and `WorshipLeader` land on `/admin/roster` (read-only). Settings and Audit are blocked. Song selecting roles see "Your Sunday" badge on their assigned Sundays.
 
 **Scope:**
 1. Update `src/middleware.ts`:
-   - Add `/wl/:path*` to `config.matcher` array (alongside `/admin/:path*`)
-   - New guard block for `/wl/` paths: allow `Admin | Coordinator | MusicCoordinator | WorshipLeader`; redirect others to `/admin/login?reason=not_worship_lead`
-   - **Critical:** Keep existing `/admin/` guard untouched — it already blocks `MusicCoordinator` and `WorshipLeader` from admin panel
+   - Extend existing `/admin/` guard to **allow** `MusicCoordinator` and `WorshipLeader` in (both were previously blocked)
+   - Add sub-path blocks inside `/admin/` for both roles: block `/admin/settings` and `/admin/audit` (redirect to `/admin/roster`)
+   - Pages they can read but not write: `/admin/roster`, `/admin/people`, `/admin/songs` — middleware passes through; page derives `canEdit` from role
+   - **No `/wl/:path*` matcher needed — no `/wl/` routes exist**
 2. Update `src/app/admin/login/page.tsx`:
-   - After successful login: `MusicCoordinator` → redirect to `/wl/roster`; `WorshipLeader` → redirect to `/wl/roster`
+   - After successful login: `MusicCoordinator` → `/admin/roster`; `WorshipLeader` → `/admin/roster`
    - `Coordinator` → stays `/admin/roster` (existing, unchanged)
-3. New `src/app/wl/layout.tsx`: WL sidebar with nav items: **Roster**, **Song Pool** — no People, Settings, Audit
-4. New `src/app/wl/roster/page.tsx`:
-   - Fetches `/api/me` to get caller's `member_id` and `app_role`
-   - Fetches roster for current month via existing `/api/roster?month=YYYY-MM`
-   - Renders `SundayCard` components in read-only mode (no admin controls)
-   - "Your Sunday" badge on cards where `worship_lead` assignment `member_id` matches caller
-   - Songs section stub: "Add songs" CTA linking to `/wl/songs?date=...&picking=1`
+3. Update `src/app/admin/layout.tsx`:
+   - Hide **Settings** and **Audit** nav items for `MusicCoordinator` and `WorshipLeader` (extend existing Coordinator logic for Settings)
+4. Update `/admin/roster/page.tsx`:
+   - Derive `canEditRoster = !memberLoading && member !== null && (member.app_role === "Admin" || member.app_role === "Coordinator")`
+   - `MusicCoordinator` and `WorshipLeader` see roster grid read-only; no assign/draft/publish roster controls visible
+   - Add "Your Sunday" badge: highlight any Sunday card where the caller's `member_id` matches the `worship_lead` slot
+5. Update `/admin/people/page.tsx` and `/admin/songs/page.tsx`:
+   - Already `canEdit`-gated for `Coordinator`; extend same gate to also exclude `MusicCoordinator` and `WorshipLeader`
 
-**Tests:** Middleware routing for all 5 roles; render test for WL layout nav items; "Your Sunday" badge detection.
+**Tests:** Middleware routing for all 5 roles (including `MusicCoordinator` and `WorshipLeader` → `/admin/roster`, blocked from `/admin/settings` and `/admin/audit`); render test that both roles see no edit controls on `/admin/roster`; "Your Sunday" badge detection.
 
 ---
 
 ### MVP 3 — Song pick mode + draft save (core feature)
-**Goal:** All three song-selecting roles can pick up to 3 songs and save as DRAFT.
+**Goal:** All song-selecting roles can pick up to 3 songs from `/admin/songs` and save as DRAFT.
 
 **Scope:**
-1. New `src/app/wl/songs/page.tsx`:
-   - Detects `?picking=1&date=` query params
+1. Update `src/app/admin/songs/page.tsx`:
+   - Detect `?picking=1&date=` query params → activate pick mode
    - Renders sticky selection tray (mobile-first, z-indexed above scroll)
    - Tray: 3 slots with song title + key chip + × remove; "Done" button
    - Re-entry: pre-loads existing draft from `GET /api/setlist?date=`
-   - "Done" → `POST /api/setlist` for each filled slot → navigate to `/wl/roster`
+   - "Done" → `POST /api/setlist` for each filled slot → navigate back to `/admin/roster`
+   - Normal songs page behaviour unchanged when params are absent
 2. Update `src/components/song-card.tsx`:
    - Add optional props: `onSelect?: (song: SongWithCharts) => void`, `isSelected?: boolean`
-   - Renders + / × button only when `onSelect` is provided (zero visual change for portal/admin)
+   - Renders + / × button only when `onSelect` is provided (zero visual change for existing admin/portal views)
    - Min 44px tap target on + button
-3. Extend `src/app/wl/roster/page.tsx`:
+3. Extend `src/app/admin/roster/page.tsx`:
    - Fetch `GET /api/setlist?date=` for each Sunday
    - Merge into Sunday card `setlist` prop
-   - Show DRAFT badge + "Edit songs" + "Publish Songs" buttons for the caller's own Sundays
+   - Show DRAFT badge + "Edit songs" + "Publish Songs" buttons for the caller's own assigned Sundays (worship_lead match)
 
-**Tests:** `SongCard` with/without `onSelect` prop; pick mode tray state management; `POST /api/setlist` integration test.
+**Tests:** `SongCard` with/without `onSelect` prop; pick mode tray state management; pick mode absent when no query params; `POST /api/setlist` integration test.
 
 ---
 
@@ -359,7 +362,7 @@ Route: `/portal/print/[date]` (public) and `/wl/print/[date]` (authenticated)
    - Chosen key in React state; saved to `chosen_key` on POST
    - No chord charts → chip shows "Original"; key picker disabled
 2. "Preview" affordance: tapping song title in tray opens `ChordSheetModal`; closing with key change updates chip
-3. Portal + WL roster: display `chosen_key ?? chord_charts[0]?.key ?? "Original key"` next to each song
+3. Portal + admin roster: display `chosen_key ?? chord_charts[0]?.key ?? "Original key"` next to each song
 
 **Tests:** Key fallback unit test; key chip tap → picker → save integration test.
 
@@ -369,7 +372,7 @@ Route: `/portal/print/[date]` (public) and `/wl/print/[date]` (authenticated)
 **Goal:** Published setlists appear on portal; musicians download combined PDF.
 
 **Scope:**
-1. WL roster Songs section — publish flow:
+1. Admin roster Songs section — publish flow (worship-leading roles only, on their own Sundays):
    - `[Save Draft]` re-saves (status → DRAFT)
    - `[Publish Songs →]` → `PATCH /api/setlist/{date}/publish`
    - Badge: DRAFT (amber) → PUBLISHED (green)
@@ -381,7 +384,7 @@ Route: `/portal/print/[date]` (public) and `/wl/print/[date]` (authenticated)
    - Fetches `GET /api/setlist?date=`; fetches `file_url` for each song in browser
    - Applies `parseChordSheet` + `semitonesBetween` transposition per song
    - Builds single jsPDF document; auto-downloads on mount
-6. Mirror at `src/app/wl/print/[date]/page.tsx` (can share the same component via a shared `PrintSetlistPage` component)
+6. Mirror at `src/app/admin/print/[date]/page.tsx` (authenticated; can share the same component via a shared `PrintSetlistPage` component)
 
 > **Why client-side PDF?** jsPDF uses DOM APIs, cannot run in Next.js API routes. Matches existing `ChordSheetModal` Print pattern — no new server infrastructure.
 
@@ -399,20 +402,18 @@ src/
                                   add SetlistStatus; update SetlistSong with all fields
     db/
       setlist.ts               ← NEW: getSetlist, upsertSetlistSong, deleteSetlistSong, publishSetlist
-  middleware.ts                ← add /wl path guard (allows Coordinator + MusicCoordinator + WorshipLeader)
-                                  add /wl/:path* to config.matcher
+  middleware.ts                ← extend /admin guard to allow MusicCoordinator + WorshipLeader
+                                  block /admin/settings + /admin/audit for MusicCoordinator + WorshipLeader
   app/
     admin/
-      login/page.tsx           ← add post-login redirect: MusicCoordinator → /wl/roster, WorshipLeader → /wl/roster
-    wl/
-      layout.tsx               ← NEW: WL sidebar (Roster + Song Pool only)
-      roster/
-        page.tsx               ← NEW: read-only roster + "Your Sunday" badge + editable Songs section
-      songs/
-        page.tsx               ← NEW: song pool + pick mode with selection tray
+      login/page.tsx           ← add post-login redirect: MusicCoordinator → /admin/roster, WorshipLeader → /admin/roster
+      layout.tsx               ← hide Settings + Audit nav for MusicCoordinator + WorshipLeader (extend existing Coordinator logic)
+      roster/page.tsx          ← extend canEditRoster gate to Admin + Coordinator only; add "Your Sunday" badge for worship-lead match
+      people/page.tsx          ← extend canEdit gate to exclude MusicCoordinator + WorshipLeader (already gated for Coordinator)
+      songs/page.tsx           ← extend canEdit gate to exclude MusicCoordinator + WorshipLeader; add pick mode (detect ?picking=1&date=)
       print/
         [date]/
-          page.tsx             ← NEW: client-side combined PDF (WL prep)
+          page.tsx             ← NEW: client-side combined PDF for authenticated roles (MusicCoordinator / WorshipLeader / Coordinator)
     portal/
       roster/
         page.tsx               ← fetch setlist per Sunday + pass to SundayCard (MVP 5)
@@ -448,13 +449,14 @@ supabase/
 - `AppRole` change: adding two values; any exhaustive switch arms will surface via TypeScript
 
 ### MVP 2 (auth)
-- New `/wl` routes are isolated from `/admin` and `/portal`
-- Middleware adds a new path guard + new matcher entry; **existing `/admin` guard is untouched**
-- Login redirect: `MusicCoordinator` and `WorshipLeader` branch is new; `Coordinator` and `Admin` flow unchanged
+- No new route areas created — all changes are inside existing `/admin/*`
+- Middleware change is additive: existing `/admin` guard extended to allow `MusicCoordinator` and `WorshipLeader` in, with targeted sub-path blocks for `/admin/settings` and `/admin/audit`; no `/wl/` matcher added
+- Login redirect: `MusicCoordinator` → `/admin/roster` (new); `WorshipLeader` → `/admin/roster` (new); `Coordinator` and `Admin` flow unchanged
+- Page-level `canEdit` and `canEditRoster` changes are purely additive — `MusicCoordinator` and `WorshipLeader` appended to existing exclusion conditions; no logic removed
 
 ### MVP 3 (pick mode)
-- `SongCard` optional props: portal and admin views pass neither → renders unchanged
-- WL songs page is a new file — portal songs page untouched
+- `SongCard` optional props: portal and admin views that don't pass `onSelect` render unchanged
+- Pick mode is an additive behaviour on the existing `/admin/songs` page — activates only when `?picking=1&date=` params are present; normal admin song browsing/editing is unaffected
 - `POST /api/setlist` is a new route — existing song/roster APIs untouched
 
 ### MVP 4 (key selection)
@@ -469,7 +471,7 @@ supabase/
 
 ## Open Questions / Future Work
 
-- **Admin roster showing setlist for Coordinators:** When the Coordinator is in `/admin/roster`, they currently see the roster grid but not their own setlist. Future improvement: show the Songs section (read-only or editable) directly on the admin roster page so they don't need to switch to `/wl/roster`. Deferred.
+- **Admin roster setlist section:** Songs section (DRAFT/PUBLISHED badges + Edit/Publish buttons) is now shown directly on `/admin/roster` for all worship-leading roles. No separate page needed.
 - **Un-publish / re-draft:** Saving edits after publish reverts to DRAFT; re-publish required. No hard lock unless Admin/Coordinator locks the full roster.
 - **More than 3 songs:** Is exactly 3 always the right number? Consider making it configurable via settings. Deferred.
 - **Song ordering:** Drag-to-reorder or swap arrows on the tray. Deferred to post-MVP.

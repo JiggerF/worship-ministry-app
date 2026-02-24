@@ -143,7 +143,8 @@ export async function middleware(request: NextRequest) {
         const member = Array.isArray(members) ? members[0] ?? null : members;
         if (isDev) console.log('MIDDLEWARE: members fetch (fallback) ->', { member });
 
-        if (!member || member.is_active !== true || (member.app_role !== 'Admin' && member.app_role !== 'Coordinator')) {
+        const ALLOWED_ROLES = ['Admin', 'Coordinator', 'WorshipLeader', 'MusicCoordinator'];
+        if (!member || member.is_active !== true || !ALLOWED_ROLES.includes(member.app_role)) {
           const loginUrl = request.nextUrl.clone();
           loginUrl.pathname = '/admin/login';
           loginUrl.searchParams.set('reason', 'not_admin');
@@ -178,11 +179,12 @@ export async function middleware(request: NextRequest) {
 
     if (isDev) console.log('MIDDLEWARE: members query ->', { member: member ?? null, memberErr: memberErr ?? null });
 
+    const ALLOWED_ROLES = ["Admin", "Coordinator", "WorshipLeader", "MusicCoordinator"];
     if (
       memberErr ||
       !member ||
       member.is_active !== true ||
-      (member.app_role !== "Admin" && member.app_role !== "Coordinator")
+      !ALLOWED_ROLES.includes(member.app_role)
     ) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/admin/login";
@@ -190,24 +192,26 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Coordinator-specific route restrictions
-    if (member.app_role === "Coordinator") {
+    // Route restrictions for Coordinator, WorshipLeader, and MusicCoordinator
+    const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as const;
+    if (RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number])) {
       const path = request.nextUrl.pathname;
-      // Block /admin/settings
+
+      // Block /admin/settings for all restricted roles
       if (path.startsWith("/admin/settings")) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/admin/roster";
         redirectUrl.searchParams.set("reason", "no_settings_access");
         return NextResponse.redirect(redirectUrl);
       }
-      // Block /admin/audit (Admin-only page)
+      // Block /admin/audit for all restricted roles
       if (path.startsWith("/admin/audit")) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/admin/roster";
         redirectUrl.searchParams.set("reason", "no_audit_access");
         return NextResponse.redirect(redirectUrl);
       }
-      // Block write actions on people and songs via URL convention (e.g. /admin/people/add, /admin/songs/edit)
+      // Block write-action URL patterns on people and songs
       if ((path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) ||
           (path.startsWith("/admin/songs") && /add|edit|delete/.test(path))) {
         const redirectUrl = request.nextUrl.clone();
