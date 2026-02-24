@@ -379,7 +379,8 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
   const [scripture, setScripture] = useState<string>(song?.scripture_anchor ?? "");
   const [youtube, setYoutube] = useState<string>(song?.youtube_url ?? "");
   const [keys, setKeys] = useState<string>((song?.chord_charts || []).map((c) => c.key).join(", ") ?? "");
-  const [chordFile, setChordFile] = useState<File | null>(null);
+  // Pre-populate from the first chart's existing file_url (Google Drive / any link)
+  const [chordLink, setChordLink] = useState<string>((song?.chord_charts || []).find((c) => c.file_url)?.file_url ?? "");
 
   return (
     <div className="space-y-4">
@@ -425,24 +426,15 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
             <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 h-12" value={youtube} onChange={(e) => setYoutube(e.target.value)} />
           </div>
           <div className="flex flex-col items-start">
-            <label className="block text-sm mb-1 text-gray-800">Upload chord sheet <span className="text-xs text-gray-400">(PDF, PNG, JPG)</span></label>
-            <div className="flex items-center gap-3">
-              <label
-                htmlFor="chord-file-modal"
-                className="inline-flex items-center px-3 py-2 bg-white border border-gray-300 rounded text-sm text-gray-700 cursor-pointer hover:bg-gray-50"
-              >
-                Select file
-              </label>
-              <input
-                id="chord-file-modal"
-                type="file"
-                accept=".pdf,.png,.jpg"
-                className="sr-only"
-                onChange={(e) => setChordFile(e.target.files?.[0] ?? null)}
-              />
-              <span className="text-sm text-gray-600">{chordFile ? chordFile.name : "No file chosen"}</span>
-            </div>
-            <p className="text-xs text-gray-400 mt-2">Upload a PDF or image of the chord sheet for performers.</p>
+            <label className="block text-sm mb-1 text-gray-800">Chord sheet link <span className="text-xs text-gray-400">(Google Drive URL)</span></label>
+            <input
+              type="url"
+              placeholder="https://drive.google.com/…"
+              className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400 h-12"
+              value={chordLink}
+              onChange={(e) => setChordLink(e.target.value)}
+            />
+            <p className="text-xs text-gray-400 mt-1">Paste the Google Drive (or any) link to the chord sheet.</p>
           </div>
       </div>
 
@@ -453,9 +445,9 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
           onClick={() => {
             const chartKeys = keys.split(",").map((k) => k.trim()).filter(Boolean);
             const chord_charts = chartKeys.map((k, i) => ({ id: (Date.now() + i).toString(), song_id: song?.id ?? "new", key: k, file_url: null as string | null, storage_path: null as string | null, created_at: new Date().toISOString() }));
-            if (chordFile) {
-              // create a temporary object URL for dev preview (file upload to storage is a future task)
-              chord_charts[0] = { ...chord_charts[0], file_url: URL.createObjectURL(chordFile) };
+            // Attach the chord sheet link to the first key's chart entry
+            if (chordLink.trim() && chord_charts[0]) {
+              chord_charts[0] = { ...chord_charts[0], file_url: chordLink.trim() };
             }
             onSave({ title, artist, status, categories: [category as SongCategory], scripture_anchor: scripture, youtube_url: youtube, chord_charts });
           }}

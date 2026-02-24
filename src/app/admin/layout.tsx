@@ -8,9 +8,13 @@ import type { Member } from "@/lib/types/database";
 function useCurrentMember() {
   const [member, setMember] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/me")
+    setLoading(true);
+    // cache: "no-store" prevents the browser from serving a stale identity
+    // after a login swap (e.g. Admin → Coordinator without a page reload).
+    fetch("/api/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled) {
@@ -24,7 +28,10 @@ function useCurrentMember() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  // Re-run on every navigation — the layout never unmounts in App Router,
+  // so pathname is the only reliable signal that a login switch may have
+  // occurred.
+  }, [pathname]);
   return { member, loading };
 }
 
