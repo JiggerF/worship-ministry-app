@@ -19,8 +19,9 @@ function useCurrentMember() {
   useEffect(() => {
     let cancelled = false;
     // Use the server-side /api/me endpoint which reads the session from cookies
+    // cache: "no-store" prevents stale identity after a login switch.
     // and queries members via service role key — works regardless of RLS policies.
-    fetch("/api/me")
+    fetch("/api/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled) {

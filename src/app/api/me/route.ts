@@ -63,7 +63,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const member = await getMemberByEmail(email);
-    return NextResponse.json(member);
+    const res = NextResponse.json(member);
+    // Never cache — a stale identity would be served after switching logins.
+    res.headers.set("Cache-Control", "no-store");
+    return res;
   } catch (e: unknown) {
     const err = e as { message?: string };
     return NextResponse.json({ error: err?.message ?? String(e) }, { status: 500 });

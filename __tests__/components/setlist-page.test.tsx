@@ -597,6 +597,216 @@ describe("AdminSetlistPage — Worship Lead display in card header", () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+describe("AdminSetlistPage — My Worship Lead indicator", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows ⭐ prefix in the option label for a date where I am the WL", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: WL_ME,
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("wl-1", "WL User"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // The first upcoming Sunday has wl-1 as WL and WL_ME.id === "wl-1"
+    await waitFor(() =>
+      expect(
+        screen.getByRole("option", { name: new RegExp(`⭐.*${SUNDAY_DATE.slice(0, 4)}`) })
+      ).toBeInTheDocument()
+    );
+  });
+
+  it("shows the 'You are the Worship Lead' pill when selected date is my WL date", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: WL_ME,
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("wl-1", "WL User"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    await screen.findByText(/you are the worship lead for that sunday/i);
+  });
+
+  it("does NOT show ⭐ or the pill when I am not assigned as WL on any date", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: ADMIN_ME,
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("wl-1", "WL User"), // wl-1 is WL, not admin-1
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // No option should start with ⭐
+    const options = screen.getAllByRole("option");
+    options.forEach((opt) => {
+      expect(opt.textContent).not.toMatch(/⭐/);
+    });
+    expect(
+      screen.queryByText(/you are the worship lead for that sunday/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("does NOT show the pill when roster has no WL assignment", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({ me: WL_ME, setlist: EMPTY_SETLIST, roster: ROSTER_NO_WL })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    expect(
+      screen.queryByText(/you are the worship lead for that sunday/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("⭐ marks only the assigned date — other Sunday options have no ⭐", async () => {
+    // roster only assigns wl-1 to SUNDAY_DATE; all other Sundays are unassigned
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: WL_ME,
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("wl-1", "WL User"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("option").some((o) => o.textContent?.startsWith("⭐"))
+      ).toBe(true)
+    );
+    const options = screen.getAllByRole("option");
+    const starredOptions = options.filter((o) => o.textContent?.startsWith("⭐"));
+    // Only 1 of the 8 Sundays is assigned
+    expect(starredOptions).toHaveLength(1);
+    // The non-starred options must not have ⭐ anywhere
+    const unstarred = options.filter((o) => !o.textContent?.startsWith("⭐"));
+    expect(unstarred).toHaveLength(7);
+    unstarred.forEach((opt) => expect(opt.textContent).not.toMatch(/⭐/));
+  });
+
+  it("pill hides when the user switches away from their WL date to another Sunday", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: WL_ME,
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("wl-1", "WL User"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // Pill is visible for the first (WL) Sunday
+    await screen.findByText(/you are the worship lead for that sunday/i);
+
+    // Pick a different Sunday (the second option, which is NOT the WL date)
+    const select = screen.getByRole("combobox");
+    const secondSunday = screen.getAllByRole("option")[1].getAttribute("value") as string;
+    await user.selectOptions(select, secondSunday);
+
+    // Pill should disappear since that date has no WL assignment for this member
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/you are the worship lead for that sunday/i)
+      ).not.toBeInTheDocument()
+    );
+  });
+
+  it("Admin rostered as WL on a date also sees ⭐ and the pill (role-agnostic)", async () => {
+    // The feature is not limited to WorshipLeader role — any member can be rostered as WL
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: ADMIN_ME,                          // Admin role
+        setlist: EMPTY_SETLIST,
+        roster: rosterWith("admin-1", "Admin User"), // but assigned on this date as WL
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole("option").some((o) => o.textContent?.startsWith("⭐"))
+      ).toBe(true)
+    );
+    await screen.findByText(/you are the worship lead for that sunday/i);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("AdminSetlistPage — card header date & THIS WEEK badge", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("card header shows the weekday + date (e.g. 'Sunday') for the selected date", async () => {
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // The merged heading should include "Sunday" (the weekday for every iso in upcomingSundays)
+    // and the year digits — exact date varies by run day.
+    const heading = screen.getByText(/sunday.*\d{4}/i);
+    expect(heading).toBeInTheDocument();
+  });
+
+  it("dropdown has accessible label 'Service date'", async () => {
+    vi.stubGlobal("fetch", makeFetch());
+    render(<AdminSetlistPage />);
+    expect(screen.getByRole("combobox", { name: /service date/i })).toBeInTheDocument();
+  });
+
+  it("THIS WEEK badge is shown when the selected date is the first upcoming Sunday", async () => {
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // Page starts at upcomingSundays[0] — badge should be visible
+    expect(screen.getByText("THIS WEEK")).toBeInTheDocument();
+  });
+
+  it("THIS WEEK badge is hidden when a later date is selected", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    // Switch to the second Sunday (not 'this week')
+    const select = screen.getByRole("combobox");
+    const secondOption = screen.getAllByRole("option")[1].getAttribute("value") as string;
+    await user.selectOptions(select, secondOption);
+    await waitFor(() =>
+      expect(screen.queryByText("THIS WEEK")).not.toBeInTheDocument()
+    );
+  });
+
+  it("THIS WEEK badge reappears when the user navigates back to the first Sunday", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    const select = screen.getByRole("combobox");
+    // Go to second Sunday
+    const secondOption = screen.getAllByRole("option")[1].getAttribute("value") as string;
+    await user.selectOptions(select, secondOption);
+    await waitFor(() => expect(screen.queryByText("THIS WEEK")).not.toBeInTheDocument());
+    // Navigate back to first
+    await user.selectOptions(select, SUNDAY_DATE);
+    await waitFor(() => expect(screen.getByText("THIS WEEK")).toBeInTheDocument());
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 describe("AdminSetlistPage — Song Picker Modal", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -631,6 +841,32 @@ describe("AdminSetlistPage — Song Picker Modal", () => {
     await user.click(addBtn);
     expect(screen.getByPlaceholderText(/search by title or artist/i)).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "All Categories" })).toBeInTheDocument();
+  });
+
+  it("picker modal shows status quick-filter chips including Learning", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    const addBtn = await screen.findByRole("button", { name: /click to add songs/i });
+    await user.click(addBtn);
+    // All four status chips must be present; "All" chip starts active
+    expect(screen.getByRole("button", { name: /^all$/i })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /🎓 learning/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^published$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /in review/i })).toBeInTheDocument();
+  });
+
+  it("clicking Learning chip activates it and deactivates All", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: EMPTY_SETLIST }));
+    render(<AdminSetlistPage />);
+    const addBtn = await screen.findByRole("button", { name: /click to add songs/i });
+    await user.click(addBtn);
+    const learningChip = screen.getByRole("button", { name: /🎓 learning/i });
+    await user.click(learningChip);
+    expect(learningChip).toHaveAttribute("aria-pressed", "true");
+    // "All" chip should now be inactive
+    expect(screen.getByRole("button", { name: /^all$/i })).toHaveAttribute("aria-pressed", "false");
   });
 
   it("Add songs button is disabled until a song is picked", async () => {

@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import { ALL_KEYS } from "@/lib/utils/transpose";
 import { SONG_CATEGORIES, CATEGORY_LABEL_MAP } from "@/lib/constants/categories";
-import type { SongWithCharts, SetlistSongWithDetails, SongCategory, MemberWithRoles } from "@/lib/types/database";
+import type { SongWithCharts, SetlistSongWithDetails, SongCategory, SongStatus, MemberWithRoles } from "@/lib/types/database";
 import { SongStatusBadge, RosterBadge } from "@/components/status-badge";
 import styles from "../../styles.module.css";
 
@@ -31,7 +31,6 @@ function getUpcomingSundays(count = 8): string[] {
 function formatSundayLabel(iso: string): string {
   const d = new Date(iso + "T12:00:00Z");
   return d.toLocaleDateString("en-AU", {
-    weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -51,7 +50,7 @@ function useCurrentMember() {
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/me")
+    fetch("/api/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled) {
@@ -73,6 +72,40 @@ function useCurrentMember() {
 
 const ITEMS_PER_PAGE = 5;
 
+type StatusFilter = SongStatus | "all";
+
+const STATUS_QUICK_FILTERS: Array<{
+  value: StatusFilter;
+  label: string;
+  activeClass: string;
+  inactiveClass: string;
+}> = [
+  {
+    value: "all",
+    label: "All",
+    activeClass: "bg-gray-900 text-white border-gray-900",
+    inactiveClass: "bg-white text-gray-600 border-gray-300 hover:border-gray-500",
+  },
+  {
+    value: "learning",
+    label: "🎓 Learning",
+    activeClass: "bg-orange-500 text-white border-orange-500",
+    inactiveClass: "bg-white text-orange-600 border-orange-300 hover:border-orange-400",
+  },
+  {
+    value: "published",
+    label: "Published",
+    activeClass: "bg-green-600 text-white border-green-600",
+    inactiveClass: "bg-white text-green-600 border-green-300 hover:border-green-400",
+  },
+  {
+    value: "internal_approved",
+    label: "In Review",
+    activeClass: "bg-blue-200 text-blue-800 border-blue-200",
+    inactiveClass: "bg-white text-blue-600 border-blue-200 hover:border-blue-400",
+  },
+];
+
 interface SongPickerModalProps {
   open: boolean;
   maxPicks: number; // how many more slots are free
@@ -86,6 +119,7 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
   const [loadingSongs, setLoadingSongs] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<SongCategory | "all">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
@@ -96,6 +130,8 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
     async function load() {
       setPicked(new Set());
       setSearch("");
+      setCategoryFilter("all");
+      setStatusFilter("all");
       setPage(1);
       setLoadingSongs(true);
       try {
@@ -120,9 +156,10 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
         (s.artist?.toLowerCase().includes(search.toLowerCase()) ?? false);
       const matchCat =
         categoryFilter === "all" || (s.categories?.includes(categoryFilter) ?? false);
-      return matchSearch && matchCat;
+      const matchStatus = statusFilter === "all" || s.status === statusFilter;
+      return matchSearch && matchCat && matchStatus;
     });
-  }, [songs, search, categoryFilter]);
+  }, [songs, search, categoryFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
   const paginated = useMemo(
@@ -198,6 +235,23 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
+
+          {/* Status quick-filter chips */}
+          <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
+            {STATUS_QUICK_FILTERS.map(({ value, label, activeClass, inactiveClass }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setStatusFilter(value); setPage(1); }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  statusFilter === value ? activeClass : inactiveClass
+                }`}
+                aria-pressed={statusFilter === value}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Song list */}
@@ -355,7 +409,7 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs disabled:opacity-40"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               ← Prev
             </button>
@@ -363,7 +417,7 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs disabled:opacity-40"
+              className="px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Next →
             </button>
@@ -420,6 +474,11 @@ export default function AdminSetlistPage() {
   const [worshipLeadName, setWorshipLeadName] = useState<string | null>(null);
   const [worshipLeadMemberId, setWorshipLeadMemberId] = useState<string | null>(null);
 
+  // ── My WL dates (all upcoming Sundays where I'm the rostered WL) ────────
+  // Fetched once per session (or when member identity changes).
+  // Used to mark option labels in the Sunday selector.
+  const [myWLDates, setMyWLDates] = useState<Set<string>>(new Set());
+
   // ── Song picker modal ────────────────────────
   const [showPicker, setShowPicker] = useState(false);
 
@@ -459,6 +518,48 @@ export default function AdminSetlistPage() {
   }, [selectedDate]);
 
   useEffect(() => { fetchSetlist(); }, [fetchSetlist]);
+
+  // ─────────────────────────────────────────────
+  // Bulk-fetch WL assignments for all upcoming months so we can mark the
+  // Sunday dropdown with ⭐ for dates where the current user is the WL.
+  // ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!currentMember) return;
+    const memberId = currentMember.id;
+
+    const months = [...new Set(upcomingSundays.map((d) => d.slice(0, 7)))];
+
+    async function loadMyWLDates() {
+      try {
+        const results = await Promise.all(
+          months.map(async (month) => {
+            const res = await fetch(`/api/roster?month=${month}`, { cache: "no-store" });
+            if (!res.ok) return [] as RosterAssignmentRaw[];
+            const json = await res.json();
+            return (Array.isArray(json.assignments) ? json.assignments : []) as RosterAssignmentRaw[];
+          })
+        );
+        const allAssignments = results.flat();
+        const dates = new Set(
+          allAssignments
+            .filter(
+              (a) =>
+                (typeof a.role === "string"
+                  ? a.role === "worship_lead"
+                  : a.role?.name === "worship_lead") &&
+                a.member?.id === memberId
+            )
+            .map((a) => a.date)
+        );
+        setMyWLDates(dates);
+      } catch {
+        // ignore — indicator simply won't appear
+      }
+    }
+
+    loadMyWLDates();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMember?.id]);
 
   // ─────────────────────────────────────────────
   // Fetch worship lead name for selected date
@@ -727,20 +828,26 @@ export default function AdminSetlistPage() {
 
       {/* Sunday selector */}
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">
-          Sunday
-        </label>
         <select
+          aria-label="Service date"
           value={selectedDate}
           onChange={(e) => setSelectedDate(e.target.value)}
           className={`${styles.selectDarkText} w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900`}
         >
           {upcomingSundays.map((iso) => (
             <option key={iso} value={iso}>
-              {formatSundayLabel(iso)}
+              {myWLDates.has(iso) ? `⭐ ${formatSundayLabel(iso)}` : formatSundayLabel(iso)}
             </option>
           ))}
         </select>
+
+        {/* Contextual pill — shown when the selected Sunday is one the user is leading */}
+        {myWLDates.has(selectedDate) && (
+          <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5">
+            <span aria-hidden="true">⭐</span>
+            You are the Worship Lead for that Sunday
+          </p>
+        )}
       </div>
 
       {/* Setlist card */}
@@ -748,19 +855,21 @@ export default function AdminSetlistPage() {
         {/* Card header */}
         <div className="px-5 py-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-600 text-white text-xs font-semibold">
-              THIS WEEK
-            </span>
+            {selectedDate === upcomingSundays[0] && (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-600 text-white text-xs font-semibold">
+                THIS WEEK
+              </span>
+            )}
             {sortedRows.length > 0 && (
               <RosterBadge status={isPublished ? "LOCKED" : "DRAFT"} />
             )}
           </div>
-          <p className="text-lg font-semibold text-gray-900 mt-1">Sunday</p>
-          <p className="text-sm text-gray-500">
+          <p className="text-lg font-semibold text-gray-900 mt-1">
             {selectedDate
               ? new Date(selectedDate + "T12:00:00Z").toLocaleDateString("en-AU", {
-                  day: "2-digit",
-                  month: "short",
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
                   year: "numeric",
                 })
               : "—"}

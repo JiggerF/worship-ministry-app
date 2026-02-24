@@ -182,6 +182,7 @@ it("renders all required form fields when Add Member is clicked", async () => {
 | Checking `null !== "Coordinator"` (evaluates to true, shows buttons) | `canEdit = !loading && member !== null && member.app_role !== "Coordinator"` |
 | Adding a modal form without a component test | Add `__tests__/components/<page>.test.tsx` asserting all form fields render |
 | Not running tests after a lint fix on a modal page | Always run `npm run test:components` — a blank form causes immediate test failures |
+| Button with only `border border-gray-300` (no text/bg color) | Always add `text-gray-700 bg-white hover:bg-gray-50` — omitting these makes buttons invisible/faint |
 
 ---
 
@@ -208,8 +209,24 @@ When a new admin page should be read-only for Coordinators:
 ## Styling Conventions
 - All UI uses Tailwind utility classes directly
 - Primary button: `px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium`
+- Secondary / outline button: `px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50`
 - Destructive button: `border-red-300 text-red-600 hover:bg-red-50`
 - Form inputs: `w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900`
 - Role pills (display): `inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700`
 - Role pills (toggle active): `bg-gray-900 text-white border-gray-900`
 - Role pills (toggle inactive): `bg-white text-gray-600 border-gray-300 hover:border-gray-500`
+- Pagination nav buttons: `px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed`
+
+### ⚠️ CRITICAL — Always specify text color AND background on every button
+
+**Every button MUST have an explicit `text-{color}` AND `bg-{color}` class.** Omitting either causes the button to render nearly invisible (browser default colors vary by OS/theme).
+
+| Button type | Required classes |
+|-------------|-----------------|
+| Primary | `bg-gray-900 text-white hover:bg-gray-800` |
+| Secondary/outline | `bg-white text-gray-700 border border-gray-300 hover:bg-gray-50` |
+| Pagination Prev/Next | `bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed` |
+| Destructive | `bg-white text-red-600 border border-red-300 hover:bg-red-50` |
+| Disabled state | Always add `disabled:opacity-40 disabled:cursor-not-allowed` — never rely on browser default dimming |
+
+**This is a recurring bug:** pagination and secondary-action buttons coded with only `border border-gray-300` (no `text-` or `bg-`) appear invisible/faint in production. **Always follow the full class pattern above.**

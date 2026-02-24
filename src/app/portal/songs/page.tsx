@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { SongCard } from "@/components/song-card";
 import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
 import { SONG_CATEGORIES } from "@/lib/constants/categories";
@@ -16,8 +17,9 @@ const STATUS_OPTIONS: { value: SongStatus | "all"; label: string }[] = [
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 const ITEMS_PER_PAGE = 10;
 
-export default function SongPoolPage() {
-  const [search, setSearch] = useState("");
+function SongPoolPageInner() {
+  const searchParams = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState<SongStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<SongCategory | "all">("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -150,5 +152,13 @@ export default function SongPoolPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SongPoolPage() {
+  return (
+    <Suspense>
+      <SongPoolPageInner />
+    </Suspense>
   );
 }

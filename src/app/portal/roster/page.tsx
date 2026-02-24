@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SundayCard, type SundayCardRoster, type SetlistItem } from "@/components/sunday-card";
 import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import makeDevRoster from "@/lib/mocks/devRoster";
-import type { MemberRole, RosterStatus } from "@/lib/types/database";
+import type { MemberRole, RosterStatus, SetlistSongWithDetails } from "@/lib/types/database";
 
 /* ----------------------------- */
 /* Types                         */
@@ -124,6 +124,25 @@ function getMonthSundays(monthValue: string) {
   return getSundaysInMonth(parsed.year, parsed.monthIndex0).map(toISODate);
 }
 
+/**
+ * Sort comparator for SundayCardRoster arrays.
+ * The upcoming Sunday (identified by `upcomingISO`) is always placed first.
+ * All other Sundays are sorted ascending (oldest → newest).
+ *
+ * Exported for unit testing.
+ */
+export function sortRosterCards(
+  rosters: { date: string }[],
+  upcomingISO: string
+): { date: string }[] {
+  return [...rosters].sort((a, b) => {
+    if (a.date === upcomingISO) return -1;
+    if (b.date === upcomingISO) return 1;
+    // ascending: oldest → newest
+    return a.date.localeCompare(b.date);
+  });
+}
+
 /* ----------------------------- */
 /* Page Component                */
 /* ----------------------------- */
@@ -165,6 +184,8 @@ export default function PortalRosterPage() {
   const [assignments, setAssignments] = useState<PortalAssignment[]>([]);
   // Dev-only setlists keyed by ISO date (YYYY-MM-DD)
   const [devSetlists, setDevSetlists] = useState<Record<string, SetlistItem[]>>({});
+  // Real setlists keyed by ISO date, fetched alongside the roster
+  const [setlistsByDate, setSetlistsByDate] = useState<Record<string, SetlistItem[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -214,6 +235,53 @@ export default function PortalRosterPage() {
         }
 
         if (!cancelled) setAssignments(mapped);
+
+        // Fetch published setlists for each Sunday in the month in parallel
+        const sundaysForMonth = getMonthSundays(activeMonth);
+        const setlistResults = await Promise.all(
+          sundaysForMonth.map(async (iso) => {
+            try {
+              const r = await fetch(`/api/setlist?date=${iso}`, { cache: "no-store" });
+              if (!r.ok) return { date: iso, items: [] as SetlistItem[] };
+              const data: unknown = await r.json();
+              const rows = Array.isArray(data) ? (data as SetlistSongWithDetails[]) : [];
+              // Debug: log youtube_url presence for each song so missing links are easy to diagnose.
+              rows.forEach((row) => {
+                if (row.song && !row.song.youtube_url) {
+                  console.warn(
+                    `[portal/roster] "${row.song.title}" has no youtube_url in DB (song_id: ${row.song_id})`
+                  );
+                }
+              });
+              const items: SetlistItem[] = rows.map((row) => ({
+                id: row.id,
+                position: row.position,
+                chosen_key: row.chosen_key,
+                song: row.song
+                  ? {
+                      id: row.song_id,
+                      title: row.song.title,
+                      artist: row.song.artist,
+                      youtube_url: row.song.youtube_url,
+                      scripture_anchor: row.song.scripture_anchor,
+                      chord_charts: (row.song.chord_charts ?? []).map((c) => ({
+                        key: c.key,
+                        file_url: c.file_url,
+                      })),
+                    }
+                  : undefined,
+              }));
+              return { date: iso, items };
+            } catch {
+              return { date: iso, items: [] as SetlistItem[] };
+            }
+          })
+        );
+        if (!cancelled) {
+          const byDate: Record<string, SetlistItem[]> = {};
+          for (const { date, items } of setlistResults) byDate[date] = items;
+          setSetlistsByDate(byDate);
+        }
       } catch (e) {
         if (!cancelled) {
           setAssignments([]);
@@ -259,26 +327,20 @@ export default function PortalRosterPage() {
             role: a.role as MemberRole,
             member: a.member,
           })),
-        // Use dev-setlists when present for local testing
-        setlist: devSetlists[iso] ?? [],
+        setlist: setlistsByDate[iso] ?? devSetlists[iso] ?? [],
         notes: null,
       };
     });
-  }, [assignments, activeMonth, devSetlists]);
+  }, [assignments, activeMonth, devSetlists, setlistsByDate]);
 
   /* ----------------------------- */
   /* Sort: upcoming Sunday first   */
   /* ----------------------------- */
 
-  const sortedRoster = useMemo(() => {
-    const upcoming = upcomingSundayISO;
-    return [...structuredRoster].sort((a, b) => {
-      if (a.date === upcoming) return -1;
-      if (b.date === upcoming) return 1;
-      // sort newest -> oldest (descending)
-      return b.date.localeCompare(a.date);
-    });
-  }, [structuredRoster, upcomingSundayISO]);
+  const sortedRoster = useMemo(
+    () => sortRosterCards(structuredRoster, upcomingSundayISO) as typeof structuredRoster,
+    [structuredRoster, upcomingSundayISO]
+  );
 
   /* ----------------------------- */
   /* Auto-scroll to upcoming card  */

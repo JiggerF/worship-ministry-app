@@ -20,10 +20,9 @@ export function SongCard({ song }: SongCardProps) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
 
-
       {/* Header: Title + Status badge */}
       <div className="flex items-start justify-between gap-3 mb-1">
-        <h3 className="text-lg font-bold text-gray-900 leading-tight">
+        <h3 className="text-base font-semibold text-gray-900 leading-tight">
           {song.title}
         </h3>
         <SongStatusBadge status={song.status} />
@@ -32,9 +31,7 @@ export function SongCard({ song }: SongCardProps) {
       {/* Artist + Categories on one line */}
       {(song.artist || (song.categories && song.categories.length > 0)) && (
         <div className="flex items-center justify-between mb-1">
-          {/* Artist left */}
           <span className="text-sm text-gray-400 mr-2">{song.artist}</span>
-          {/* Categories right */}
           {song.categories && song.categories.length > 0 && (
             <div className="flex flex-wrap gap-1.5 justify-end">
               {song.categories.map((cat) => (
@@ -50,7 +47,6 @@ export function SongCard({ song }: SongCardProps) {
         </div>
       )}
 
-
       {/* Scripture Anchor */}
       {song.scripture_anchor && (
         <p className="text-xs text-gray-500 mb-4 flex items-center gap-1.5">
@@ -58,9 +54,8 @@ export function SongCard({ song }: SongCardProps) {
           {song.scripture_anchor}
         </p>
       )}
-      {/* No divider, just spacing above chord chart section */}
 
-      {/* Chord Charts & Musician Actions */}
+          {/* Chord Charts & Musician Actions */}
       <div className="mb-2">
         {/* Section heading row */}
         <div className="flex items-center gap-3 mb-2">

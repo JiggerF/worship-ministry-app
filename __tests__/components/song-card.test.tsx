@@ -168,7 +168,6 @@ describe("SongCard — scripture anchor", () => {
 describe("SongCard — chord chart key pills", () => {
   it("renders a key pill for a single chart", () => {
     render(<SongCard song={BASE_SONG} />);
-    // The key "G" should appear as a link/pill
     expect(screen.getByText("G")).toBeInTheDocument();
   });
 

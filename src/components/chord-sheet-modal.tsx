@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useMemo, startTransition } from "react";
 import jsPDF from "jspdf";
 import * as Dialog from "@radix-ui/react-dialog";
-import type { ChordChart } from "@/lib/types/database";
 import {
   ALL_KEYS,
   normalizeKey,
@@ -11,9 +10,15 @@ import {
   parseChordSheet,
 } from "@/lib/utils/transpose";
 
+/** Minimal chart shape the modal actually needs — looser than full ChordChart */
+export interface ChordSheetModalChart {
+  key: string;
+  file_url?: string | null;
+}
+
 interface ChordSheetModalProps {
   /** All chord charts with file_urls for this song */
-  charts: ChordChart[];
+  charts: ChordSheetModalChart[];
   songTitle: string;
   /** Called when the musician selects a target key — used for card-level feedback */
   onKeyChange?: (key: string) => void;
@@ -38,7 +43,7 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
   const [open, setOpen] = useState(false);
 
   // Source: which chord chart document to fetch and display
-  const [sourceChart, setSourceChart] = useState<ChordChart>(charts[0]);
+  const [sourceChart, setSourceChart] = useState<ChordSheetModalChart>(charts[0]);
 
   // Target: the key the musician wants to transpose to
   const [targetKey, setTargetKey] = useState(() => normalizeKey(charts[0].key));
@@ -75,8 +80,8 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
   }, [open, sourceChart.file_url, rawText]);
 
   // Switch source document — resets target key to the new source key and re-fetches
-  const handleSourceChange = useCallback((chartId: string) => {
-    const chart = charts.find((c) => c.id === chartId);
+  const handleSourceChange = useCallback((chartKey: string) => {
+    const chart = charts.find((c) => c.key === chartKey);
     if (!chart) return;
     setSourceChart(chart);
     setTargetKey(normalizeKey(chart.key));
@@ -256,12 +261,12 @@ export function ChordSheetModal({ charts, songTitle, onKeyChange, children }: Ch
                   </label>
                   <select
                     id="source-select"
-                    value={sourceChart.id}
+                    value={sourceChart.key}
                     onChange={(e) => handleSourceChange(e.target.value)}
                     className="px-2 py-1 text-sm font-semibold rounded-md border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-gray-900 cursor-pointer"
                   >
                     {charts.map((c) => (
-                      <option key={c.id} value={c.id}>
+                      <option key={c.key} value={c.key}>
                         {c.key}
                       </option>
                     ))}
