@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
+import { getActorFromRequest } from "@/lib/server/get-actor";
 
 const supabaseUrl =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -208,6 +210,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  // Await audit before returning — fire-and-forget .then() is dropped by serverless
+  // runtimes that terminate immediately after the response is sent.
+  try {
+    const actor = await getActorFromRequest(req);
+    if (actor) {
+      await createAuditLogEntry({
+        actor_id: actor.id,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "save_roster_draft",
+        entity_type: "roster",
+        summary: `Saved roster draft (${payload.length} assignment${payload.length !== 1 ? "s" : ""})`,
+      });
+    }
+  } catch {
+    // Intentionally swallow — audit must never break the primary operation
+  }
+
   return NextResponse.json({ success: true });
 }
 
@@ -255,6 +275,25 @@ export async function PATCH(req: NextRequest) {
 
     const { error } = await supabase.from('app_settings').upsert({ key, value }, { onConflict: 'key' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Await audit before returning — fire-and-forget .then() is dropped by serverless
+    // runtimes that terminate immediately after the response is sent.
+    try {
+      const actor = await getActorFromRequest(req);
+      if (actor) {
+        await createAuditLogEntry({
+          actor_id: actor.id,
+          actor_name: actor.name,
+          actor_role: actor.role,
+          action: "save_roster_note",
+          entity_type: "roster",
+          summary: `Updated roster note for ${body.month}`,
+        });
+      }
+    } catch {
+      // Intentionally swallow — audit must never break the primary operation
+    }
+
     return NextResponse.json({ success: true });
   }
 
@@ -287,6 +326,24 @@ export async function PATCH(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Await audit before returning — fire-and-forget .then() is dropped by serverless
+    // runtimes that terminate immediately after the response is sent.
+    try {
+      const actor = await getActorFromRequest(req);
+      if (actor) {
+        await createAuditLogEntry({
+          actor_id: actor.id,
+          actor_name: actor.name,
+          actor_role: actor.role,
+          action: "revert_roster",
+          entity_type: "roster",
+          summary: `Reverted roster for ${body.month} to draft`,
+        });
+      }
+    } catch {
+      // Intentionally swallow — audit must never break the primary operation
+    }
+
     return NextResponse.json({ success: true });
   }
 
@@ -303,6 +360,24 @@ export async function PATCH(req: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Await audit before returning — fire-and-forget .then() is dropped by serverless
+  // runtimes that terminate immediately after the response is sent.
+  try {
+    const actor = await getActorFromRequest(req);
+    if (actor) {
+      await createAuditLogEntry({
+        actor_id: actor.id,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "finalize_roster",
+        entity_type: "roster",
+        summary: `Finalized roster for ${body.month}`,
+      });
+    }
+  } catch {
+    // Intentionally swallow — audit must never break the primary operation
   }
 
   return NextResponse.json({ success: true });

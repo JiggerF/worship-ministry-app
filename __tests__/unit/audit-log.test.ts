@@ -6,7 +6,7 @@
  * Verifies write behaviour (silent error swallowing), paginated read logic,
  * sort direction mapping, and error propagation.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { CreateAuditLogEntry } from "@/lib/db/audit-log";
 
 // ── Build mock via vi.hoisted ──
@@ -208,5 +208,59 @@ describe("getAuditLog — error handling", () => {
     await expect(getAuditLog(1)).rejects.toMatchObject({
       message: "query failed",
     });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Missing env vars — module-level constant early-return paths
+// Uses vi.resetModules() + dynamic import to re-evaluate the module with
+// empty env vars so the module-level constants evaluate to falsy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("createAuditLogEntry — missing env vars", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("returns void without throwing when SUPABASE_URL is not set", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.resetModules();
+    const { createAuditLogEntry: freshCreate } = await import("@/lib/db/audit-log");
+    await expect(freshCreate(SAMPLE_ENTRY)).resolves.toBeUndefined();
+  });
+
+  it("does not call Supabase createClient when env vars are missing", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.resetModules();
+    // Fresh mock instance for this re-evaluated module
+    const freshMockCreate = vi.fn();
+    vi.doMock("@supabase/supabase-js", () => ({ createClient: freshMockCreate }));
+    const { createAuditLogEntry: freshCreate } = await import("@/lib/db/audit-log");
+    await freshCreate(SAMPLE_ENTRY);
+    expect(freshMockCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("getAuditLog — missing env vars", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("returns empty result without throwing when env vars are not set", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.resetModules();
+    const { getAuditLog: freshGet } = await import("@/lib/db/audit-log");
+    const result = await freshGet(1);
+    expect(result.entries).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.pageSize).toBe(50);
   });
 });

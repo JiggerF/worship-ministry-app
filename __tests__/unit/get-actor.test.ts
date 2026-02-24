@@ -6,7 +6,7 @@
  * Verifies actor extraction from the sb-access-token JWT cookie, including
  * all null-return edge cases and the success path.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { makeNextRequest } from "../integration/_helpers";
 
 // ── Build mock via vi.hoisted so references are valid inside vi.mock factory ──
@@ -168,5 +168,102 @@ describe("getActorFromRequest — success path", () => {
     });
     const result = await getActorFromRequest(req);
     expect(result?.role).toBe("Coordinator");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dev bypass (NODE_ENV=development + dev_auth=1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getActorFromRequest — dev bypass", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("returns synthetic Dev Admin actor when NODE_ENV=development and dev_auth=1", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const req = makeNextRequest({
+      cookies: { dev_auth: "1" },
+    });
+    const result = await getActorFromRequest(req);
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe("dev");
+    expect(result?.name).toBe("Dev Admin");
+    expect(result?.role).toBe("Admin");
+  });
+
+  it("does NOT use dev bypass when dev_auth is '0'", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const req = makeNextRequest({
+      cookies: { dev_auth: "0" },
+      // no sb-access-token either → should return null
+    });
+    const result = await getActorFromRequest(req);
+    expect(result).toBeNull();
+  });
+
+  it("does NOT use dev bypass when dev_auth cookie is absent", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const req = makeNextRequest({}); // no cookies at all
+    const result = await getActorFromRequest(req);
+    expect(result).toBeNull();
+  });
+
+  it("does NOT use dev bypass when NODE_ENV is not 'development'", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    const req = makeNextRequest({
+      cookies: { dev_auth: "1" }, // bypass cookie present, but not in dev mode
+    });
+    const result = await getActorFromRequest(req);
+    // No sb-access-token → returns null regardless of dev_auth
+    expect(result).toBeNull();
+  });
+
+  it("bypasses DB lookup entirely — does not query Supabase members table", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const req = makeNextRequest({
+      cookies: { dev_auth: "1" },
+    });
+    await getActorFromRequest(req);
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Missing env vars — module-level constant early-return path
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("getActorFromRequest — missing env vars", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("returns null when SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are not set", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.resetModules();
+    const { getActorFromRequest: freshGetActor } = await import("@/lib/server/get-actor");
+    const { makeNextRequest: freshMakeReq } = await import("../integration/_helpers");
+    const jwt = `fakeheader.${Buffer.from(JSON.stringify({ email: "test@wcc.org" })).toString("base64")}.fakesig`;
+    const req = freshMakeReq({ cookies: { "sb-access-token": jwt } });
+    const result = await freshGetActor(req);
+    expect(result).toBeNull();
+  });
+
+  it("does not attempt a Supabase lookup when env vars are missing", async () => {
+    vi.stubEnv("SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    vi.resetModules();
+    const freshCreateClient = vi.fn();
+    vi.doMock("@supabase/supabase-js", () => ({ createClient: freshCreateClient }));
+    const { getActorFromRequest: freshGetActor } = await import("@/lib/server/get-actor");
+    const { makeNextRequest: freshMakeReq } = await import("../integration/_helpers");
+    const jwt = `fakeheader.${Buffer.from(JSON.stringify({ email: "test@wcc.org" })).toString("base64")}.fakesig`;
+    const req = freshMakeReq({ cookies: { "sb-access-token": jwt } });
+    await freshGetActor(req);
+    expect(freshCreateClient).not.toHaveBeenCalled();
   });
 });

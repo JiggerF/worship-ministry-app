@@ -28,31 +28,60 @@ export async function getActorFromRequest(
     }
   }
 
-  if (!supabaseUrl || !serviceKey) return null;
+  if (!supabaseUrl || !serviceKey) {
+    console.error("[audit] getActorFromRequest: missing env vars", {
+      hasUrl: !!supabaseUrl,
+      hasKey: !!serviceKey,
+    });
+    return null;
+  }
 
   const token = req.cookies.get("sb-access-token")?.value;
-  if (!token) return null;
+  if (!token) {
+    const cookieNames = req.cookies.getAll().map((c) => c.name);
+    console.error("[audit] getActorFromRequest: sb-access-token cookie missing", {
+      presentCookies: cookieNames,
+    });
+    return null;
+  }
 
   try {
     const parts = token.split(".");
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3) {
+      console.error("[audit] getActorFromRequest: token is not a valid JWT (wrong part count)", {
+        partCount: parts.length,
+      });
+      return null;
+    }
 
     const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
     const email: string | undefined = payload?.email;
-    if (!email) return null;
+    if (!email) {
+      console.error("[audit] getActorFromRequest: JWT payload has no email field", {
+        payloadKeys: Object.keys(payload ?? {}),
+      });
+      return null;
+    }
 
     const supabase = createClient(supabaseUrl, serviceKey);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("members")
       .select("id, name, app_role")
       .eq("email", email)
       .single();
 
-    if (!data) return null;
+    if (error || !data) {
+      console.error("[audit] getActorFromRequest: member lookup returned no data", {
+        email,
+        supabaseError: error?.message ?? null,
+      });
+      return null;
+    }
 
     const row = data as { id: string; name: string; app_role: string };
     return { id: row.id, name: row.name, role: row.app_role };
-  } catch {
+  } catch (err) {
+    console.error("[audit] getActorFromRequest: unexpected exception", err);
     return null;
   }
 }
