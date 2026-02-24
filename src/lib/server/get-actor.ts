@@ -6,7 +6,7 @@ const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export interface AuditActor {
-  id: string;
+  id: string | null;
   name: string;
   role: string;
 }
@@ -24,7 +24,7 @@ export async function getActorFromRequest(
   if (process.env.NODE_ENV === "development") {
     const devAuth = req.cookies.get("dev_auth")?.value;
     if (devAuth === "1") {
-      return { id: "dev", name: "Dev Admin", role: "Admin" };
+      return { id: null, name: "Dev Admin", role: "Admin" };
     }
   }
 

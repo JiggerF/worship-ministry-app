@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
 import { deleteSetlistSong } from "@/lib/db/setlist";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
 import type { AppRole } from "@/lib/types/database";
 
 const SETLIST_ROLES: AppRole[] = ["Admin", "Coordinator", "MusicCoordinator", "WorshipLeader"];
@@ -27,6 +28,19 @@ export async function DELETE(
 
   try {
     await deleteSetlistSong(id);
+
+    try {
+      await createAuditLogEntry({
+        actor_id: actor.id ?? null,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "delete_setlist_song",
+        entity_type: "setlist",
+        entity_id: id,
+        summary: `Removed song from setlist (row ${id})`,
+      });
+    } catch { /* intentionally swallow */ }
+
     return new NextResponse(null, { status: 204 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

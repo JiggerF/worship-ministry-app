@@ -8,11 +8,11 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export type { AuditAction };
 
 export interface CreateAuditLogEntry {
-  actor_id: string;
+  actor_id: string | null;
   actor_name: string;
   actor_role: string;
   action: AuditAction;
-  entity_type: "song" | "roster";
+  entity_type: "song" | "roster" | "setlist";
   entity_id?: string | null;
   summary: string;
 }

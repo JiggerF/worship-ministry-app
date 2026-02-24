@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
 import { publishSetlist } from "@/lib/db/setlist";
+import { createAuditLogEntry } from "@/lib/db/audit-log";
 import type { AppRole } from "@/lib/types/database";
 
 const SETLIST_ROLES: AppRole[] = ["Admin", "Coordinator", "MusicCoordinator", "WorshipLeader"];
@@ -27,6 +28,19 @@ export async function PATCH(
 
   try {
     await publishSetlist(date);
+
+    try {
+      await createAuditLogEntry({
+        actor_id: actor.id ?? null,
+        actor_name: actor.name,
+        actor_role: actor.role,
+        action: "publish_setlist",
+        entity_type: "setlist",
+        entity_id: date,
+        summary: `Published setlist for ${date}`,
+      });
+    } catch { /* intentionally swallow */ }
+
     return NextResponse.json({ published: true, date });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

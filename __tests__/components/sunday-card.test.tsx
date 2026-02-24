@@ -3,13 +3,36 @@
  * src/components/sunday-card.tsx
  *
  * Verifies date formatting, role slot rendering, status badges,
- * empty-state display, and the "THIS WEEK" highlight when isNext=true.
+ * empty-state display, the "THIS WEEK" highlight when isNext=true,
+ * and the "Download All Chord Charts" PDF compilation feature.
  */
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SundayCard } from "@/components/sunday-card";
 import type { SundayCardRoster } from "@/components/sunday-card";
+
+// ─── jsPDF mock ──────────────────────────────────────────────────────────────
+const mockSave = vi.fn();
+const mockAddPage = vi.fn();
+const mockText = vi.fn();
+const mockSetFont = vi.fn();
+const mockSetFontSize = vi.fn();
+const mockSetTextColor = vi.fn();
+const mockSplitTextToSize = vi.fn((text: string) => [text]);
+
+vi.mock("jspdf", () => ({
+  default: vi.fn(function (this: Record<string, unknown>) {
+    this.save = mockSave;
+    this.addPage = mockAddPage;
+    this.text = mockText;
+    this.setFont = mockSetFont;
+    this.setFontSize = mockSetFontSize;
+    this.setTextColor = mockSetTextColor;
+    this.splitTextToSize = mockSplitTextToSize;
+    this.internal = { pageSize: { getWidth: () => 595, getHeight: () => 842 } };
+  }),
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -422,5 +445,312 @@ describe("SundayCard — accordion (one open at a time)", () => {
     expect(screen.getByText(/John 3:16/i)).toBeInTheDocument();
     // Alpha had no scripture — no stale content
     expect(screen.queryByText(/Ephesians/i)).not.toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Download All Chord Charts — PDF compilation
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Roster where ALL songs have downloadable chord charts
+const ROSTER_ALL_DOWNLOADABLE: SundayCardRoster = {
+  date: "2026-03-08",
+  status: "LOCKED",
+  assignments: [],
+  setlist: [
+    {
+      id: "dl-1",
+      position: 1,
+      chosen_key: "G",
+      song: {
+        id: "song-1",
+        title: "How Great Is Our God",
+        artist: "Chris Tomlin",
+        chord_charts: [
+          { key: "G", file_url: "https://docs.google.com/document/d/abc123" },
+          { key: "A", file_url: "https://docs.google.com/document/d/abc456" },
+        ],
+      },
+    },
+    {
+      id: "dl-2",
+      position: 2,
+      chosen_key: "D",
+      song: {
+        id: "song-2",
+        title: "Amazing Grace",
+        artist: "Traditional",
+        chord_charts: [
+          { key: "C", file_url: "https://docs.google.com/document/d/def123" },
+          { key: "D", file_url: "https://docs.google.com/document/d/def456" },
+        ],
+      },
+    },
+  ],
+  notes: null,
+};
+
+// Roster where NO songs have downloadable charts (all file_url are null)
+const ROSTER_NO_DOWNLOADABLE: SundayCardRoster = {
+  date: "2026-03-08",
+  status: "DRAFT",
+  assignments: [],
+  setlist: [
+    {
+      id: "nd-1",
+      position: 1,
+      song: {
+        title: "Song Without Charts",
+        chord_charts: [{ key: "C", file_url: null }],
+      },
+    },
+  ],
+  notes: null,
+};
+
+// Roster with a mix — one song has charts, one does not
+const ROSTER_PARTIAL_DOWNLOADABLE: SundayCardRoster = {
+  date: "2026-03-08",
+  status: "DRAFT",
+  assignments: [],
+  setlist: [
+    {
+      id: "pd-1",
+      position: 1,
+      chosen_key: "E",
+      song: {
+        title: "Song With Chart",
+        chord_charts: [
+          { key: "E", file_url: "https://docs.google.com/document/d/eee111" },
+        ],
+      },
+    },
+    {
+      id: "pd-2",
+      position: 2,
+      song: {
+        title: "Song Without Chart",
+        chord_charts: [],
+      },
+    },
+  ],
+  notes: null,
+};
+
+// Roster with chosen_key that doesn't match any chart key — should fall back
+const ROSTER_KEY_FALLBACK: SundayCardRoster = {
+  date: "2026-03-08",
+  status: "DRAFT",
+  assignments: [],
+  setlist: [
+    {
+      id: "fb-1",
+      position: 1,
+      chosen_key: "Bb",
+      song: {
+        title: "Fallback Song",
+        chord_charts: [
+          { key: "G", file_url: "https://docs.google.com/document/d/fallback1" },
+        ],
+      },
+    },
+  ],
+  notes: null,
+};
+
+/** Builds a fetch mock that returns chord sheet text for any /api/chord-sheet call */
+function makeFetchMock(textByUrl?: Record<string, string>) {
+  return vi.fn((url: string) => {
+    if (typeof url === "string" && url.startsWith("/api/chord-sheet")) {
+      const params = new URLSearchParams(url.split("?")[1]);
+      const docUrl = params.get("url") ?? "";
+      const text = textByUrl?.[docUrl] ?? "[Verse]\nG  C  D\nAmazing grace";
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ text }),
+      });
+    }
+    return Promise.resolve({
+      ok: false,
+      json: () => Promise.resolve({ error: "Not found" }),
+    });
+  });
+}
+
+describe("SundayCard — Download All Chord Charts", () => {
+  beforeEach(() => {
+    mockSave.mockClear();
+    mockAddPage.mockClear();
+    mockText.mockClear();
+    mockSetFont.mockClear();
+    mockSetFontSize.mockClear();
+    mockSetTextColor.mockClear();
+    mockSplitTextToSize.mockClear();
+    mockSplitTextToSize.mockImplementation((text: string) => [text]);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("download button is disabled when no songs have downloadable charts", () => {
+    render(<SundayCard roster={ROSTER_NO_DOWNLOADABLE} isNext={false} />);
+    const btn = screen.getByRole("button", { name: /download all chord charts/i });
+    expect(btn).toBeDisabled();
+  });
+
+  it("download button is enabled when at least one song has a downloadable chart", () => {
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    const btn = screen.getByRole("button", { name: /download all chord charts/i });
+    expect(btn).not.toBeDisabled();
+  });
+
+  it("download button is enabled with partial downloadable songs", () => {
+    render(<SundayCard roster={ROSTER_PARTIAL_DOWNLOADABLE} isNext={false} />);
+    const btn = screen.getByRole("button", { name: /download all chord charts/i });
+    expect(btn).not.toBeDisabled();
+  });
+
+  it("clicking download fetches chord sheets and generates a PDF", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    const btn = screen.getByRole("button", { name: /download all chord charts/i });
+
+    await user.click(btn);
+
+    // Wait for the PDF to be saved
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    // Should have fetched chord sheets for both songs
+    const chordSheetCalls = fetchMock.mock.calls.filter(
+      (call: string[]) => typeof call[0] === "string" && call[0].startsWith("/api/chord-sheet")
+    );
+    expect(chordSheetCalls).toHaveLength(2);
+
+    // PDF filename should include the date
+    expect(mockSave).toHaveBeenCalledWith("Chord-Charts-08-Mar-2026.pdf");
+  });
+
+  it("fetches the chart matching chosen_key when available", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    // Song 1 chosen_key=G → should fetch the G chart URL
+    const calls = fetchMock.mock.calls.map((c: string[]) => c[0]) as string[];
+    expect(calls.some((url: string) => url.includes(encodeURIComponent("https://docs.google.com/document/d/abc123")))).toBe(true);
+    // Song 2 chosen_key=D → should fetch the D chart URL
+    expect(calls.some((url: string) => url.includes(encodeURIComponent("https://docs.google.com/document/d/def456")))).toBe(true);
+  });
+
+  it("falls back to first chart with file_url when chosen_key has no matching chart", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SundayCard roster={ROSTER_KEY_FALLBACK} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    }, { timeout: 3000 });
+
+    // chosen_key=Bb but only G chart exists → should fetch the G chart
+    const calls = fetchMock.mock.calls.map((c: string[]) => c[0]) as string[];
+    expect(calls.some((url: string) => url.includes(encodeURIComponent("https://docs.google.com/document/d/fallback1")))).toBe(true);
+  });
+
+  it("only fetches charts for songs that have downloadable files (skips empty)", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SundayCard roster={ROSTER_PARTIAL_DOWNLOADABLE} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    // Only 1 song has a chart — should only fetch once
+    const chordSheetCalls = fetchMock.mock.calls.filter(
+      (call: string[]) => typeof call[0] === "string" && call[0].startsWith("/api/chord-sheet")
+    );
+    expect(chordSheetCalls).toHaveLength(1);
+  });
+
+  it("adds a new page for each song in the compiled PDF", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchMock());
+
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    // 2 songs → addPage called once (first song uses initial page)
+    expect(mockAddPage).toHaveBeenCalled();
+  });
+
+  it("shows loading state while generating PDF", async () => {
+    const user = userEvent.setup();
+    // Use a delayed fetch to observe loading state
+    vi.stubGlobal("fetch", vi.fn(() =>
+      new Promise((resolve) =>
+        setTimeout(() => resolve({
+          ok: true,
+          json: () => Promise.resolve({ text: "G C D\nTest lyric" }),
+        }), 100)
+      )
+    ));
+
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    // Should show loading text
+    expect(screen.getByText("Generating PDF…")).toBeInTheDocument();
+
+    // Wait for completion
+    await waitFor(() => {
+      expect(mockSave).toHaveBeenCalledTimes(1);
+    });
+
+    // Should revert to normal text
+    expect(screen.getByText("Download All Chord Charts [PDF]")).toBeInTheDocument();
+  });
+
+  it("does not generate PDF when fetch returns errors for all songs", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ error: "Doc not found" }),
+      })
+    ));
+
+    render(<SundayCard roster={ROSTER_ALL_DOWNLOADABLE} isNext={false} />);
+    await user.click(screen.getByRole("button", { name: /download all chord charts/i }));
+
+    // Wait for fetch to complete
+    await waitFor(() => {
+      expect(screen.getByText("Download All Chord Charts [PDF]")).toBeInTheDocument();
+    });
+
+    // PDF save should NOT have been called
+    expect(mockSave).not.toHaveBeenCalled();
   });
 });

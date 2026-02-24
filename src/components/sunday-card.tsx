@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
+import jsPDF from "jspdf";
 import { ChordSheetModal } from "@/components/chord-sheet-modal";
 import type { MemberRole, RosterStatus } from "@/lib/types/database";
 import { ROLE_SHORT_LABEL_MAP } from "@/lib/constants/roles";
+import {
+  normalizeKey,
+  semitonesBetween,
+  parseChordSheet,
+} from "@/lib/utils/transpose";
 import styles from "../app/styles.module.css";
 
 export type SundayCardAssignment = {
@@ -77,8 +83,144 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
 
   // Track which setlist item (by index) is expanded
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-  // Track the transposed key the musician last selected, per song index
 
+  // Download all chord charts state
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Compute which setlist songs have at least one downloadable chart
+  const downloadableSongs = useMemo(() => {
+    return setlist
+      .filter((item) => {
+        const charts = item.song?.chord_charts ?? [];
+        return charts.some((c) => c.file_url);
+      })
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }, [setlist]);
+
+  const hasDownloadableCharts = downloadableSongs.length > 0;
+
+  // Download all chord charts as a single compiled PDF
+  const handleDownloadAll = useCallback(async () => {
+    if (!hasDownloadableCharts || isDownloading) return;
+    setIsDownloading(true);
+
+    try {
+      // For each downloadable song, resolve which chart to fetch
+      const fetchTasks = downloadableSongs.map((item) => {
+        const charts = item.song?.chord_charts ?? [];
+        const chosenKey = item.chosen_key;
+
+        // Prefer the chart matching chosen_key, otherwise first chart with a file
+        let chart = chosenKey
+          ? charts.find((c) => c.file_url && c.key === chosenKey)
+          : null;
+        if (!chart) {
+          chart = charts.find((c) => c.file_url) ?? null;
+        }
+        if (!chart || !chart.file_url) return null;
+
+        const targetKey = chosenKey ?? chart.key;
+
+        return {
+          songTitle: item.song?.title ?? "Unknown",
+          chartKey: chart.key,
+          targetKey,
+          fileUrl: chart.file_url,
+        };
+      }).filter((t): t is NonNullable<typeof t> => t !== null);
+
+      // Fetch all chord sheet texts in parallel
+      const results = await Promise.all(
+        fetchTasks.map(async (task) => {
+          const res = await fetch(
+            `/api/chord-sheet?url=${encodeURIComponent(task.fileUrl)}`
+          );
+          const data = await res.json();
+          if (data.error || !data.text) return { ...task, text: null };
+          return { ...task, text: data.text as string };
+        })
+      );
+
+      const successful = results.filter((r) => r.text !== null);
+      if (successful.length === 0) {
+        setIsDownloading(false);
+        return;
+      }
+
+      // Build a single multi-song PDF
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 40;
+      const marginBottom = 50;
+
+      successful.forEach((song, songIdx) => {
+        if (songIdx > 0) doc.addPage();
+
+        let y = 50;
+        const normalizedTarget = normalizeKey(song.targetKey);
+        const title = `${song.songTitle} — Key of ${normalizedTarget}`;
+
+        // Title
+        doc.setFont("Courier", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(title, marginX, y);
+        y += 28;
+
+        // Parse and transpose
+        const semitones = semitonesBetween(
+          normalizeKey(song.chartKey),
+          normalizedTarget
+        );
+        const lines = parseChordSheet(song.text!, semitones, normalizedTarget);
+
+        doc.setFontSize(12);
+        for (const line of lines) {
+          // Page break check
+          if (y > pageHeight - marginBottom) {
+            doc.addPage();
+            y = 50;
+          }
+
+          if (line.type === "empty") {
+            y += 12;
+          } else if (line.type === "section") {
+            doc.setFont("Courier", "bold");
+            doc.setTextColor(55, 65, 81);
+            doc.text(line.display, marginX, y);
+            y += 18;
+          } else if (line.type === "chord") {
+            doc.setFont("Courier", "bold");
+            doc.setTextColor(180, 83, 9);
+            doc.text(line.display, marginX, y);
+            y += 16;
+          } else {
+            doc.setFont("Courier", "normal");
+            doc.setTextColor(33, 37, 41);
+            // Wrap long lyric lines
+            const splitLines = doc.splitTextToSize(
+              line.display,
+              pageWidth - marginX * 2
+            );
+            for (const sl of splitLines) {
+              if (y > pageHeight - marginBottom) {
+                doc.addPage();
+                y = 50;
+              }
+              doc.text(sl, marginX, y);
+              y += 15;
+            }
+          }
+        }
+      });
+
+      const dateLabel = formatShortDate(roster.date).replace(/ /g, "-");
+      doc.save(`Chord-Charts-${dateLabel}.pdf`);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [hasDownloadableCharts, isDownloading, downloadableSongs, roster.date]);
 
   const col1 = COL1_ROLES.map((role) => ({
     role,
@@ -300,25 +442,34 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
             <div className="mt-4">
               <button
                 type="button"
-                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 border rounded-md text-sm font-medium border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                onClick={handleDownloadAll}
+                disabled={!hasDownloadableCharts || isDownloading}
+                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 border rounded-md text-sm font-medium border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 aria-label="Download all chord charts PDF"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M12 3v12" />
-                  <path d="M19 12l-7 7-7-7" />
-                  <path d="M5 21h14" />
-                </svg>
-                <span>Download All Chord Charts [PDF]</span>
+                {isDownloading ? (
+                  <svg className="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                ) : (
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 3v12" />
+                    <path d="M19 12l-7 7-7-7" />
+                    <path d="M5 21h14" />
+                  </svg>
+                )}
+                <span>{isDownloading ? "Generating PDF…" : "Download All Chord Charts [PDF]"}</span>
               </button>
             </div>
           )}
