@@ -11,7 +11,6 @@ function useCurrentMember() {
   const pathname = usePathname();
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     // cache: "no-store" prevents the browser from serving a stale identity
     // after a login swap (e.g. Admin → Coordinator without a page reload).
     fetch("/api/me", { cache: "no-store" })
@@ -44,8 +43,9 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/audit", label: "Audit Log", icon: "🔍" },
 ];
 
-// Pages that Coordinators cannot access
-const COORDINATOR_HIDDEN = ["/admin/settings", "/admin/audit"];
+// Pages hidden for Coordinator, WorshipLeader, and MusicCoordinator
+const RESTRICTED_NAV_HIDDEN = ["/admin/settings", "/admin/audit"];
+const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as const;
 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -57,9 +57,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <>{children}</>;
   }
 
-  // Hide Settings and Audit Log nav for Coordinator (only filter once role is confirmed)
-  const filteredSidebar = !memberLoading && member?.app_role === "Coordinator"
-    ? SIDEBAR_ITEMS.filter((item) => !COORDINATOR_HIDDEN.includes(item.href))
+  // Hide Settings and Audit Log nav for Coordinator, WorshipLeader, MusicCoordinator
+  // Only filter once role is confirmed (memberLoading guard prevents flash)
+  const isRestricted = !memberLoading && member !== null && RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number]);
+  const filteredSidebar = isRestricted
+    ? SIDEBAR_ITEMS.filter((item) => !RESTRICTED_NAV_HIDDEN.includes(item.href))
     : SIDEBAR_ITEMS;
 
   return (

@@ -41,14 +41,18 @@ function useCurrentMember() {
 
 export default function AdminPeoplePage() {
   const { member, loading: memberLoading } = useCurrentMember();
-  // Hide action buttons while loading (member is null) AND when role is Coordinator.
+  // Hide action buttons while loading (member is null) AND when role lacks edit permission.
   // Defaulting to hidden prevents a flash of edit buttons before the role is confirmed.
-  const canEdit = !memberLoading && member !== null && member.app_role !== "Coordinator";
+  const canEdit = !memberLoading && member !== null &&
+    member.app_role !== "Coordinator" &&
+    member.app_role !== "WorshipLeader" &&
+    member.app_role !== "MusicCoordinator";
   // Initialize empty when not in mock mode — avoids the mock-data flash on load
   const [members, setMembers] = useState<MemberWithRoles[]>([]);
 
-  // Filter out Admin users for Coordinator
-  const filteredMembers = member?.app_role === "Coordinator"
+  // Filter out Admin users for Coordinator, WorshipLeader, and MusicCoordinator
+  const READ_ONLY_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"];
+  const filteredMembers = member && READ_ONLY_ROLES.includes(member.app_role)
     ? members.filter((m) => m.app_role !== "Admin")
     : members;
 
@@ -451,6 +455,8 @@ export default function AdminPeoplePage() {
                   className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
                 >
                   <option value="Musician">Musician</option>
+                  <option value="WorshipLeader">Worship Lead</option>
+                  <option value="MusicCoordinator">Music Coordinator</option>
                   <option value="Coordinator">Coordinator</option>
                   <option value="Admin">Admin</option>
                 </select>

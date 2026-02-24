@@ -7,6 +7,25 @@ import { RosterBadge } from "@/components/status-badge";
 import makeDevRoster from "@/lib/mocks/devRoster";
 import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles, RosterAssignmentWithDetails } from "@/lib/types/database";
 
+function useCurrentMember() {
+  const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) {
+          setMember(data ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+  return { member, loading };
+}
+
 interface ApiAssignment {
   id: string;
   member_id: string;
@@ -54,6 +73,12 @@ function monthToNumber(yearMonth: string) {
 }
 
 export default function AdminRosterPage() {
+  const { member, loading: memberLoading } = useCurrentMember();
+  // Only Admin and Coordinator can edit the roster grid.
+  // Default to false (restrictive) while loading to prevent flash of edit controls.
+  const canEditRoster = !memberLoading && member !== null &&
+    (member.app_role === "Admin" || member.app_role === "Coordinator");
+
   const [activeMonth, setActiveMonth] = useState(getCurrentMonth);
   const [roster, setRoster] = useState<SundayRoster[]>([]);
   const [membersList, setMembersList] = useState<MemberWithRoles[]>([]);
@@ -432,7 +457,7 @@ export default function AdminRosterPage() {
 
                     return (
                       <td key={role} className="px-2 py-2">
-                        { (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
+                        { !canEditRoster || (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
                           <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
                             {assignment?.member?.name ?? "—"}
                           </span>
@@ -503,8 +528,8 @@ export default function AdminRosterPage() {
         </div>
       )}
 
-      {/* Bottom action buttons (Save / Finalise) — moved to bottom right */}
-      {!loading && (
+      {/* Bottom action buttons (Save / Finalise) — only visible to Admin and Coordinator */}
+      {!loading && canEditRoster && (
         <div className="flex justify-end gap-2 mt-4">
           <button
             onClick={handleSaveDraft}

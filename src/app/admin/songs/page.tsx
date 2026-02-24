@@ -1,19 +1,26 @@
 
 "use client";
+import { useMemo, useState, useEffect } from "react";
 
-// Helper to get user role from localStorage/session (replace with real auth in prod)
-function useAppRole() {
-  const getInitialRole = () => {
-    if (typeof window !== "undefined") {
-      return window.localStorage.getItem("app_role") || "Admin";
-    }
-    return "Admin";
-  };
-  const [role] = useState<string>(getInitialRole);
-  return role;
+function useCurrentMember() {
+  const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled) {
+          setMember(data ?? null);
+          setLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+  return { member, loading };
 }
 
-import { useMemo, useState, useEffect } from "react";
 import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
 import type { SongWithCharts, SongCategory, SongStatus } from "@/lib/types/database";
 import { Button } from "@/components/ui/Button";
@@ -44,7 +51,12 @@ const ITEMS_PER_PAGE = 20;
 const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 
 export default function AdminSongsPage() {
-  const appRole = useAppRole();
+  const { member, loading: memberLoading } = useCurrentMember();
+  // Hidden while loading AND for roles without edit permission — avoids flash of edit buttons.
+  const canEdit = !memberLoading && member !== null &&
+    member.app_role !== "Coordinator" &&
+    member.app_role !== "WorshipLeader" &&
+    member.app_role !== "MusicCoordinator";
   const initial = IS_MOCK ? MOCK_SONGS : ([] as SongWithCharts[]);
 
   const [songs, setSongs] = useState<SongWithCharts[]>(initial);
@@ -114,21 +126,21 @@ export default function AdminSongsPage() {
   }, [sorted, currentPage]);
 
   function openAdd() {
-    if (appRole === "Coordinator") return;
+    if (!canEdit) return;
     setEditing(null);
     setSaveError(null);
     setIsEditOpen(true);
   }
 
   function openEdit(song: SongWithCharts) {
-    if (appRole === "Coordinator") return;
+    if (!canEdit) return;
     setEditing(song);
     setSaveError(null);
     setIsEditOpen(true);
   }
 
   async function saveSong(payload: Partial<SongWithCharts>) {
-    if (appRole === "Coordinator") return;
+    if (!canEdit) return;
     // Mock mode: local state only
     if (IS_MOCK) {
       if (editing) {
@@ -236,7 +248,7 @@ export default function AdminSongsPage() {
             <p className="text-sm text-gray-700">Manage worship songs and chord charts</p>
           </div>
           <div className="flex gap-3">
-            {appRole !== "Coordinator" && (
+            {canEdit && (
               <Button onClick={openAdd} className="bg-[#071027] text-white px-4 py-2">+ Add Song</Button>
             )}
           </div>
@@ -320,7 +332,7 @@ export default function AdminSongsPage() {
                         )}</td>
                         <td className="px-3 py-3">
                           <div className="flex gap-2">
-                            {appRole !== "Coordinator" && (
+                            {canEdit && (
                               <>
                                 <button onClick={() => openEdit(song)} className="px-3 py-1 text-sm border rounded text-gray-700 bg-white">Edit</button>
                                 <button onClick={() => { setDeleting(song); setIsDeleteOpen(true); }} className="px-3 py-1 text-sm text-red-600 border border-red-600 rounded">Delete</button>
@@ -346,7 +358,7 @@ export default function AdminSongsPage() {
       </div>
 
       {/* Edit / Add Modal */}
-      {isEditOpen && appRole !== "Coordinator" && (
+      {isEditOpen && canEdit && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg w-[900px] max-w-full p-6 border border-gray-200">
             <h2 className="text-lg font-semibold mb-4 text-black">{editing ? "Edit Song" : "Add Song"}</h2>
