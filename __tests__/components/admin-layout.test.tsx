@@ -77,9 +77,9 @@ describe("AdminLayout — Admin nav", () => {
     renderLayout();
     // All six pages must be present — scope to sidebar-nav to avoid portal links
     const nav = await screen.findByTestId("sidebar-nav");
-    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /songs/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /song manager/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /people/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /settings/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /audit log/i })).toBeInTheDocument();
@@ -106,9 +106,9 @@ describe("AdminLayout — Coordinator nav", () => {
     renderLayout();
 
     const nav = await screen.findByTestId("sidebar-nav");
-    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /songs/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /song manager/i })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: /people/i })).toBeInTheDocument();
 
     await waitFor(() => {

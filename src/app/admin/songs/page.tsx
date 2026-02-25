@@ -46,6 +46,16 @@ const CATEGORIES = [
 
 const STATUSES = ["All Statuses", "learning", "in_review", "published"] as const;
 
+const STATUS_LABELS: Record<string, string> = {
+  "All Statuses": "All Statuses",
+  learning: "Learning",
+  in_review: "In Review",
+  published: "Published",
+};
+
+// Display order: In Review → Learning → Published
+const STATUSES_ORDERED = ["All Statuses", "in_review", "learning", "published"] as const;
+
 const ITEMS_PER_PAGE = 20;
 
 const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
@@ -122,6 +132,22 @@ export default function AdminSongsPage() {
   }, [filtered, sortField, sortDirection]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / ITEMS_PER_PAGE));
+
+  // Counts across ALL songs (unaffected by current filters) for the quick-stats bar
+  const statusCounts = useMemo(() => {
+    const list = Array.isArray(songs) ? songs : [];
+    return list.reduce(
+      (acc, s) => {
+        const normalized = s.status === "internal_approved" ? "in_review" : s.status;
+        if (normalized === "published") acc.published++;
+        else if (normalized === "learning") acc.learning++;
+        else if (normalized === "in_review") acc.in_review++;
+        return acc;
+      },
+      { published: 0, learning: 0, in_review: 0 }
+    );
+  }, [songs]);
+
   const paginated = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     return sorted.slice(start, start + ITEMS_PER_PAGE);
@@ -278,12 +304,43 @@ export default function AdminSongsPage() {
 
             <div className="w-44">
               <Select className="bg-white border border-gray-200 text-gray-800" value={filterStatus} onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                {STATUSES_ORDERED.map((s) => (
+                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
                 ))}
               </Select>
             </div>
             </div>
+
+          {/* Quick-stats bar */}
+          <div className="flex items-center gap-1.5 mt-4 text-sm text-gray-600">
+            {([
+              { label: "In Review", key: "in_review", count: statusCounts.in_review, color: "text-purple-700" },
+              { label: "Learning", key: "learning", count: statusCounts.learning, color: "text-blue-700" },
+              { label: "Published", key: "published", count: statusCounts.published, color: "text-green-700" },
+            ] as const).map(({ label, key, count, color }, i) => (
+              <span key={key} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-gray-300 select-none">|</span>}
+                <button
+                  type="button"
+                  onClick={() => { setFilterStatus(key); setCurrentPage(1); }}
+                  className={`underline underline-offset-2 font-medium hover:opacity-70 transition-opacity ${
+                    filterStatus === key ? "opacity-100" : "opacity-80"
+                  } ${color}`}
+                >
+                  {label} ({count})
+                </button>
+              </span>
+            ))}
+            {filterStatus !== STATUSES[0] && (
+              <button
+                type="button"
+                onClick={() => { setFilterStatus(STATUSES[0]); setCurrentPage(1); }}
+                className="ml-2 text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
 
           <div className="flex items-center justify-between mt-3">
             <div className="text-sm text-gray-700">
@@ -361,27 +418,42 @@ export default function AdminSongsPage() {
 
       {/* Edit / Add Modal */}
       {isEditOpen && canEditSong && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-[900px] max-w-full p-6 border border-gray-200">
-            <h2 className="text-lg font-semibold mb-4 text-black">{editing ? "Edit Song" : "Add Song"}</h2>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-2xl shadow-xl border border-gray-200">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">{editing ? "Edit Song" : "Add Song"}</h2>
+            </div>
             {saveError && (
-              <div className="mb-4 px-3 py-2 rounded bg-red-50 border border-red-200 text-sm text-red-700">{saveError}</div>
+              <div className="mx-6 mt-4 px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{saveError}</div>
             )}
-            <EditForm song={editing} isSaving={isSaving} onCancel={() => setIsEditOpen(false)} onSave={(p) => saveSong(p)} />
+            <div className="px-6 py-5">
+              <EditForm song={editing} isSaving={isSaving} onCancel={() => setIsEditOpen(false)} onSave={(p) => saveSong(p)} />
+            </div>
           </div>
         </div>
       )}
 
       {/* Delete Confirm */}
       {isDeleteOpen && deleting && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-[420px]">
-            <h3 className="font-semibold">Delete Song?</h3>
-          <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete &quot;{deleting.title}&quot;? This cannot be undone.</p>
-            <div className="mt-4 flex justify-end gap-2">
-              <button disabled={isDeleting} onClick={() => { setIsDeleteOpen(false); setDeleting(null); }} className="px-3 py-1 border rounded">Cancel</button>
-              <button disabled={isDeleting} onClick={confirmDelete} className="px-3 py-1 bg-red-600 text-white rounded disabled:opacity-50">
-                {isDeleting ? "Deleting..." : "Delete"}
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200">
+            <h3 className="text-base font-semibold text-gray-900">Delete Song?</h3>
+            <p className="text-sm text-gray-600 mt-2">Are you sure you want to delete &quot;{deleting.title}&quot;? This cannot be undone.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={isDeleting}
+                onClick={() => { setIsDeleteOpen(false); setDeleting(null); }}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={confirmDelete}
+                className="px-4 py-2 rounded-lg border border-red-300 text-sm text-red-600 bg-white hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>
@@ -404,77 +476,118 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
   const [chordLink, setChordLink] = useState<string>((song?.chord_charts || []).find((c) => c.file_url)?.file_url ?? "");
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
+      {/* Row 1: Title + Artist */}
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm mb-1 text-gray-800">Title</label>
-          <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Title</label>
+          <input
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="Song title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </div>
         <div>
-          <label className="block text-sm mb-1 text-gray-800">Artist</label>
-          <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400" value={artist ?? ""} onChange={(e) => setArtist(e.target.value)} />
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Artist</label>
+          <input
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="Artist name"
+            value={artist ?? ""}
+            onChange={(e) => setArtist(e.target.value)}
+          />
         </div>
       </div>
 
+      {/* Row 2: Status + Category + Keys */}
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="block text-sm mb-1 text-gray-800">Status</label>
-          <select className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800" value={status} onChange={(e) => setStatus(e.target.value as SongStatus)}>
-            <option value="learning">New Song – Learning</option>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+          <select
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as SongStatus)}
+          >
             <option value="in_review">In Review</option>
+            <option value="learning">Learning</option>
             <option value="published">Published</option>
           </select>
         </div>
         <div>
-          <label className="block text-sm mb-1 text-gray-800">Category</label>
-          <select className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Category</label>
+          <select
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
             {CATEGORIES.slice(1).map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Keys <span className="text-gray-400 font-normal">(comma separated)</span></label>
+          <input
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="e.g. G, A, B♭"
+            value={keys}
+            onChange={(e) => setKeys(e.target.value)}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-          <div className="flex flex-col items-start">
-            <label className="block text-sm mb-1 text-gray-800">Keys (comma separated)</label>
-            <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 h-12" value={keys} onChange={(e) => setKeys(e.target.value)} />
-          </div>
-          <div className="flex flex-col items-start">
-            <label className="block text-sm mb-1 text-gray-800">Scripture</label>
-            <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 h-12" value={scripture} onChange={(e) => setScripture(e.target.value)} />
-          </div>
-          <div className="flex flex-col items-start">
-            <label className="block text-sm mb-1 text-gray-800">Video Ref (YouTube URL)</label>
-            <input className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 h-12" value={youtube} onChange={(e) => setYoutube(e.target.value)} />
-          </div>
-          <div className="flex flex-col items-start">
-            <label className="block text-sm mb-1 text-gray-800">Chord sheet link <span className="text-xs text-gray-400">(Google Drive URL)</span></label>
-            <input
-              type="url"
-              placeholder="https://drive.google.com/…"
-              className="w-full border border-gray-300 px-3 py-2 rounded text-gray-800 placeholder-gray-400 h-12"
-              value={chordLink}
-              onChange={(e) => setChordLink(e.target.value)}
-            />
-            <p className="text-xs text-gray-400 mt-1">Paste the Google Drive (or any) link to the chord sheet.</p>
-          </div>
+      {/* Row 3: Scripture + YouTube + Chord sheet */}
+      <div className="grid grid-cols-3 gap-4 items-end">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Scripture</label>
+          <input
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="e.g. Psalm 100:1–5"
+            value={scripture}
+            onChange={(e) => setScripture(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Video <span className="text-gray-400 font-normal">(YouTube URL)</span></label>
+          <input
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="https://youtu.be/…"
+            value={youtube}
+            onChange={(e) => setYoutube(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Chord sheet <span className="text-gray-400 font-normal">(Google Drive URL)</span></label>
+          <input
+            type="url"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            placeholder="https://drive.google.com/…"
+            value={chordLink}
+            onChange={(e) => setChordLink(e.target.value)}
+          />
+        </div>
       </div>
 
-      <div className="flex justify-end gap-2">
-        <button disabled={isSaving} onClick={onCancel} className="px-3 py-1 border border-gray-300 rounded text-gray-700 bg-white disabled:opacity-50">Cancel</button>
+      {/* Footer actions */}
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          disabled={isSaving}
+          onClick={onCancel}
+          className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Cancel
+        </button>
         <button
           disabled={isSaving}
           onClick={() => {
             const chartKeys = keys.split(",").map((k) => k.trim()).filter(Boolean);
             const chord_charts = chartKeys.map((k, i) => ({ id: (Date.now() + i).toString(), song_id: song?.id ?? "new", key: k, file_url: null as string | null, storage_path: null as string | null, created_at: new Date().toISOString() }));
-            // Attach the chord sheet link to the first key's chart entry
             if (chordLink.trim() && chord_charts[0]) {
               chord_charts[0] = { ...chord_charts[0], file_url: chordLink.trim() };
             }
             onSave({ title, artist, status, categories: [category as SongCategory], scripture_anchor: scripture, youtube_url: youtube, chord_charts });
           }}
-          className="px-3 py-1 bg-[#071027] text-white rounded disabled:opacity-50"
+          className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {isSaving ? "Saving..." : song ? "Update Song" : "Add Song"}
+          {isSaving ? "Saving…" : song ? "Update Song" : "Add Song"}
         </button>
       </div>
     </div>

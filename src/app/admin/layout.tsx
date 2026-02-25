@@ -76,7 +76,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <p className="text-xs text-gray-600">Rostering Admin</p>
         </div>
 
-        <nav className="flex-1 p-2" data-testid="sidebar-nav">
+        <nav className="p-2" data-testid="sidebar-nav">
+          <p className="px-3 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            Admin
+          </p>
           {filteredSidebar.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -96,9 +99,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* Portal quick-links */}
-        <div className="px-2 pb-2 border-b border-gray-200">
-          <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+        {/* Portal quick-links — below admin nav */}
+        <div className="px-2 pt-2 pb-2 border-t border-gray-200">
+          <p className="px-3 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
             Portal
           </p>
           {[
@@ -118,43 +121,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </a>
           ))}
         </div>
-
-        <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-              👤
-            </div>
-            <div>
-              {/* Show logged-in user's name and role tag */}
-              {memberLoading ? (
-                <p className="text-sm font-medium text-gray-400">—</p>
-              ) : member ? (
-                <>
-                  <p className="text-sm font-medium text-gray-900">
-                    {member.name} <span className="ml-2 px-2 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">{member.app_role}</span>
-                  </p>
-                  <Link
-                    href="/admin/login"
-                    className="text-xs text-gray-500 hover:text-gray-700"
-                  >
-                    Sign out
-                  </Link>
-                </>
-              ) : (
-                <Link
-                  href="/admin/login"
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  Sign out
-                </Link>
-              )}
-            </div>
-          </div>
-        </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 p-6 overflow-auto">{children}</main>
+      {/* Right column: top header + main content */}
+      <div className="flex-1 flex flex-col min-h-screen">
+        {/* Top header bar */}
+        <header className="h-12 bg-white border-b border-gray-200 flex items-center justify-end px-6 shrink-0">
+          {memberLoading ? (
+            <span className="text-sm text-gray-400">—</span>
+          ) : member ? (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-900">{member.name}</span>
+              <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">{member.app_role}</span>
+              <Link href="/admin/login" className="text-xs text-gray-500 hover:text-gray-700">
+                Sign out
+              </Link>
+            </div>
+          ) : (
+            <Link href="/admin/login" className="text-xs text-gray-500 hover:text-gray-700">
+              Sign out
+            </Link>
+          )}
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 p-6 overflow-auto">{children}</main>
+      </div>
     </div>
   );
 }
