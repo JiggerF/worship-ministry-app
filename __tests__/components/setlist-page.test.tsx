@@ -8,6 +8,8 @@
  * - Published setlist: LOCKED badge, Revert to Draft button
  * - canEdit guard: WorshipLeader assigned to date sees controls
  * - canEdit guard: WorshipLeader NOT assigned sees amber notice + no action controls
+ * - canEdit guard: MusicCoordinator assigned to date sees controls
+ * - canEdit guard: MusicCoordinator NOT assigned sees amber notice + no action controls
  * - Coordinator always has edit access
  * - Song Picker Modal open/close
  */
@@ -64,6 +66,8 @@ const ADMIN_ME = makeMe({ id: "admin-1", app_role: "Admin" });
 const COORDINATOR_ME = makeMe({ id: "coord-1", app_role: "Coordinator" });
 const WL_ME = makeMe({ id: "wl-1", name: "WL User", app_role: "WorshipLeader" });
 const WL_OTHER_ME = makeMe({ id: "wl-99", name: "Other WL", app_role: "WorshipLeader" });
+const MC_ME = makeMe({ id: "mc-1", name: "Music Coord", app_role: "MusicCoordinator" });
+const MC_OTHER_ME = makeMe({ id: "mc-99", name: "Other MC", app_role: "MusicCoordinator" });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Setlist & roster fixtures
@@ -559,6 +563,58 @@ describe("AdminSetlistPage — Coordinator (always canEdit)", () => {
     expect(
       screen.queryByText(/you are not the worship lead for this sunday/i)
     ).not.toBeInTheDocument();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("AdminSetlistPage — MusicCoordinator permission guard", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("assigned MC (id matches worship_lead) sees action buttons (canEdit=true)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: MC_ME,
+        setlist: THREE_ROWS,
+        roster: rosterWith("mc-1", "Music Coord"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await screen.findByRole("button", { name: /finalise/i });
+    expect(screen.getByRole("button", { name: /finalise/i })).toBeInTheDocument();
+  });
+
+  it("non-assigned MC sees amber read-only notice", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: MC_OTHER_ME,
+        setlist: THREE_ROWS,
+        roster: rosterWith("mc-1", "Music Coord"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    await screen.findByText(/you are not the worship lead for this sunday/i);
+  });
+
+  it("non-assigned MC does NOT see action buttons", async () => {
+    vi.stubGlobal(
+      "fetch",
+      makeFetch({
+        me: MC_OTHER_ME,
+        setlist: THREE_ROWS,
+        roster: rosterWith("mc-1", "Music Coord"),
+      })
+    );
+    render(<AdminSetlistPage />);
+    await waitForSetlist();
+    await screen.findByText(/you are not the worship lead for this sunday/i);
+    expect(screen.queryByRole("button", { name: /finalise/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
   });
 });
 

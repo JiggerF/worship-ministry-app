@@ -14,6 +14,13 @@ const supabase = createClient(supabaseUrl, serviceKey);
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
+  // Admin, Coordinator, and MusicCoordinator can edit songs
+  const SONG_EDIT_ROLES = ["Admin", "Coordinator", "MusicCoordinator"];
+  const actor = await getActorFromRequest(req);
+  if (!actor || !SONG_EDIT_ROLES.includes(actor.role)) {
+    return NextResponse.json({ error: "Not authorized to edit songs" }, { status: 403 });
+  }
+
   const { id } = await params;
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
@@ -50,19 +57,17 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 
   // Await audit before returning — fire-and-forget .then() is dropped by serverless
   // runtimes that terminate immediately after the response is sent.
+  // Reuse actor from auth check above for audit logging
   try {
-    const actor = await getActorFromRequest(req);
-    if (actor) {
-      await createAuditLogEntry({
-        actor_id: actor.id,
-        actor_name: actor.name,
-        actor_role: actor.role,
-        action: "update_song",
-        entity_type: "song",
-        entity_id: id,
-        summary: `Updated song '${songData.title}'`,
-      });
-    }
+    await createAuditLogEntry({
+      actor_id: actor.id,
+      actor_name: actor.name,
+      actor_role: actor.role,
+      action: "update_song",
+      entity_type: "song",
+      entity_id: id,
+      summary: `Updated song '${songData.title}'`,
+    });
   } catch {
     // Intentionally swallow — audit must never break the primary operation
   }
@@ -71,6 +76,13 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
 }
 
 export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  // Only Admin and Coordinator can delete songs
+  const SONG_DELETE_ROLES = ["Admin", "Coordinator"];
+  const actor = await getActorFromRequest(req);
+  if (!actor || !SONG_DELETE_ROLES.includes(actor.role)) {
+    return NextResponse.json({ error: "Not authorized to delete songs" }, { status: 403 });
+  }
+
   const { id } = await params;
 
   // Fetch title before deleting for the audit summary
@@ -82,19 +94,17 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
 
   // Await audit before returning — fire-and-forget .then() is dropped by serverless
   // runtimes that terminate immediately after the response is sent.
+  // Reuse actor from auth check above for audit logging
   try {
-    const actor = await getActorFromRequest(req);
-    if (actor) {
-      await createAuditLogEntry({
-        actor_id: actor.id,
-        actor_name: actor.name,
-        actor_role: actor.role,
-        action: "delete_song",
-        entity_type: "song",
-        entity_id: id,
-        summary: `Deleted song '${(existing as { title?: string } | null)?.title ?? id}'`,
-      });
-    }
+    await createAuditLogEntry({
+      actor_id: actor.id,
+      actor_name: actor.name,
+      actor_role: actor.role,
+      action: "delete_song",
+      entity_type: "song",
+      entity_id: id,
+      summary: `Deleted song '${(existing as { title?: string } | null)?.title ?? id}'`,
+    });
   } catch {
     // Intentionally swallow — audit must never break the primary operation
   }

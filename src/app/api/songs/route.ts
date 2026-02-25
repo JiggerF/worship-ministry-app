@@ -30,10 +30,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  // Coordinator cannot create songs
-  const role = req.headers.get("x-app-role") || req.cookies.get("app_role")?.value;
-  if (role === "Coordinator") {
-    return NextResponse.json({ error: "Coordinator cannot create songs" }, { status: 403 });
+  // Only Admin and Coordinator can create songs — validate server-side via JWT
+  const SONG_CREATE_ROLES = ["Admin", "Coordinator"];
+  const actor = await getActorFromRequest(req);
+  if (!actor || !SONG_CREATE_ROLES.includes(actor.role)) {
+    return NextResponse.json({ error: "Not authorized to create songs" }, { status: 403 });
   }
   const body = await req.json().catch(() => null);
   if (!body || !body.title) return NextResponse.json({ error: "Missing title" }, { status: 400 });
@@ -64,21 +65,17 @@ export async function POST(req: NextRequest) {
     if (chartsErr) return NextResponse.json({ error: chartsErr.message }, { status: 500 });
   }
 
-  // Await audit before returning — fire-and-forget .then() is dropped by serverless
-  // runtimes that terminate immediately after the response is sent.
+  // Reuse actor from auth check above for audit logging
   try {
-    const actor = await getActorFromRequest(req);
-    if (actor) {
-      await createAuditLogEntry({
-        actor_id: actor.id,
-        actor_name: actor.name,
-        actor_role: actor.role,
-        action: "create_song",
-        entity_type: "song",
-        entity_id: songData.id,
-        summary: `Created song '${songData.title}'`,
-      });
-    }
+    await createAuditLogEntry({
+      actor_id: actor.id,
+      actor_name: actor.name,
+      actor_role: actor.role,
+      action: "create_song",
+      entity_type: "song",
+      entity_id: songData.id,
+      summary: `Created song '${songData.title}'`,
+    });
   } catch {
     // Intentionally swallow — audit must never break the primary operation
   }

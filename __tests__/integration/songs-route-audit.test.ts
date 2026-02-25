@@ -129,6 +129,10 @@ beforeEach(() => {
   });
   mockFrom.mockReturnValue(mockQuery);
 
+  // Reset .then to a fresh vi.fn() to clear any stale mockImplementationOnce queue
+  // (early-return tests like 403 may leave unconsumed Once callbacks)
+  mockQuery.then = vi.fn();
+
   // Default: authenticated Admin actor, successful DB op
   mockGetActor.mockResolvedValue(ADMIN_ACTOR);
   mockCreateAuditLogEntry.mockResolvedValue(undefined);
@@ -209,11 +213,11 @@ describe("POST /api/songs — audit instrumentation", () => {
     expect(mockCreateAuditLogEntry).not.toHaveBeenCalled();
   });
 
-  it("does NOT call createAuditLogEntry when Coordinator role is denied (403)", async () => {
+  it("does NOT call createAuditLogEntry when non-Admin role is denied (403)", async () => {
+    mockGetActor.mockResolvedValue({ id: "wl-1", name: "Worship Leader", role: "WorshipLeader" });
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/songs",
-      headers: { "x-app-role": "Coordinator" },
       body: { title: "New Song" },
     });
     const res = await POST(req);

@@ -3,10 +3,20 @@
  * Integration tests — PATCH /api/songs/[id]  &  DELETE /api/songs/[id]
  * src/app/api/songs/[id]/route.ts
  *
- * Tests song update (with chord chart replacement) and deletion.
+ * Tests role-based authorisation, song update (with chord chart replacement),
+ * and deletion.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeNextRequest } from "./_helpers";
+
+// ── Mock getActorFromRequest ──
+const mockGetActor = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" })
+);
+
+vi.mock("@/lib/server/get-actor", () => ({
+  getActorFromRequest: mockGetActor,
+}));
 
 // ── Build mock via vi.hoisted ──
 const { mockQuery, mockFrom, mockClient } = vi.hoisted(() => {
@@ -58,10 +68,73 @@ beforeEach(() => {
       error: null,
     }).then(resolve)
   );
+
+  // Default: Admin actor
+  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH /api/songs/[id]
+// PATCH /api/songs/[id] — authorisation
+// ─────────────────────────────────────────────────────────────────────────────
+describe("PATCH /api/songs/[id] — authorisation", () => {
+  it("allows Admin to edit songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin", role: "Admin" });
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+      body: { title: "Updated Song" },
+    });
+    const res = await PATCH(req, makeContext(SONG_ID));
+    expect(res.status).toBe(200);
+  });
+
+  it("allows MusicCoordinator to edit songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "mc-1", name: "Music Coord", role: "MusicCoordinator" });
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+      body: { title: "Updated Song" },
+    });
+    const res = await PATCH(req, makeContext(SONG_ID));
+    expect(res.status).toBe(200);
+  });
+
+  it("allows Coordinator to edit songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "coord-1", name: "Coordinator", role: "Coordinator" });
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+      body: { title: "Updated Song" },
+    });
+    const res = await PATCH(req, makeContext(SONG_ID));
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 403 for WorshipLeader role", async () => {
+    mockGetActor.mockResolvedValue({ id: "wl-1", name: "Worship Leader", role: "WorshipLeader" });
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+      body: { title: "Updated Song" },
+    });
+    const res = await PATCH(req, makeContext(SONG_ID));
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 403 when unauthenticated (no actor)", async () => {
+    mockGetActor.mockResolvedValue(null);
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+      body: { title: "Updated Song" },
+    });
+    const res = await PATCH(req, makeContext(SONG_ID));
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PATCH /api/songs/[id] — functional
 // ─────────────────────────────────────────────────────────────────────────────
 describe("PATCH /api/songs/[id]", () => {
   it("returns 400 when body is missing or invalid", async () => {
@@ -141,7 +214,68 @@ describe("PATCH /api/songs/[id]", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /api/songs/[id]
+// DELETE /api/songs/[id] — authorisation
+// ─────────────────────────────────────────────────────────────────────────────
+describe("DELETE /api/songs/[id] — authorisation", () => {
+  it("allows Admin to delete songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin", role: "Admin" });
+    (mockQuery.then as typeof mockQuery.then) = vi.fn((resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data: null, error: null }).then(resolve)
+    );
+    const req = makeNextRequest({
+      method: "DELETE",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+    });
+    const res = await DELETE(req, makeContext(SONG_ID));
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 403 for MusicCoordinator role (cannot delete songs)", async () => {
+    mockGetActor.mockResolvedValue({ id: "mc-1", name: "Music Coord", role: "MusicCoordinator" });
+    const req = makeNextRequest({
+      method: "DELETE",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+    });
+    const res = await DELETE(req, makeContext(SONG_ID));
+    expect(res.status).toBe(403);
+  });
+
+  it("allows Coordinator to delete songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "coord-1", name: "Coordinator", role: "Coordinator" });
+    (mockQuery.then as typeof mockQuery.then) = vi.fn((resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data: null, error: null }).then(resolve)
+    );
+    const req = makeNextRequest({
+      method: "DELETE",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+    });
+    const res = await DELETE(req, makeContext(SONG_ID));
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 403 for WorshipLeader role", async () => {
+    mockGetActor.mockResolvedValue({ id: "wl-1", name: "Worship Leader", role: "WorshipLeader" });
+    const req = makeNextRequest({
+      method: "DELETE",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+    });
+    const res = await DELETE(req, makeContext(SONG_ID));
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 403 when unauthenticated (no actor)", async () => {
+    mockGetActor.mockResolvedValue(null);
+    const req = makeNextRequest({
+      method: "DELETE",
+      url: `http://localhost/api/songs/${SONG_ID}`,
+    });
+    const res = await DELETE(req, makeContext(SONG_ID));
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/songs/[id] — functional
 // ─────────────────────────────────────────────────────────────────────────────
 describe("DELETE /api/songs/[id]", () => {
   it("returns 200 with success:true on deletion", async () => {
@@ -160,12 +294,18 @@ describe("DELETE /api/songs/[id]", () => {
   });
 
   it("returns 500 when Supabase delete fails", async () => {
-    (mockQuery.then as typeof mockQuery.then) = vi.fn((resolve: (v: unknown) => unknown) =>
-      Promise.resolve({
+    // First call (select title) succeeds, second call (delete) fails
+    let callCount = 0;
+    (mockQuery.then as typeof mockQuery.then) = vi.fn((resolve: (v: unknown) => unknown) => {
+      callCount++;
+      if (callCount <= 1) {
+        return Promise.resolve({ data: { title: "Song" }, error: null }).then(resolve);
+      }
+      return Promise.resolve({
         data: null,
         error: { message: "deletion failed" },
-      }).then(resolve)
-    );
+      }).then(resolve);
+    });
 
     const req = makeNextRequest({
       method: "DELETE",

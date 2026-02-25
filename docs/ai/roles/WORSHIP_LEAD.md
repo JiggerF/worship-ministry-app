@@ -281,114 +281,101 @@ Route: `/portal/print/[date]` (public) and `/admin/print/[date]` (authenticated)
 
 ## MVP Slices
 
-### MVP 1 — Foundation: data layer + TypeScript types (no UI changes)
-**Goal:** Everything compiles, no existing behaviour breaks, DB table exists.
-
-**Scope:**
-1. Migration `010_worship_lead_types.sql` — documents that `WorshipLeader` and `MusicCoordinator` already exist in DB enum (SQL comment-only or no-op; serves as migration history marker)
-2. Migration `011_sunday_setlist.sql` — `CREATE TABLE public.sunday_setlist` (schema above)
-3. Update `src/lib/types/database.ts`:
-   - Add `"MusicCoordinator"` and `"WorshipLeader"` to `AppRole`
-   - Add `SetlistStatus = "DRAFT" | "PUBLISHED"`
-   - Update `SetlistSong` with all fields (`chosen_key`, `status`, `created_by`, `created_at`, `updated_at`)
-4. New `src/lib/db/setlist.ts`: `getSetlist(date)`, `upsertSetlistSong(...)`, `deleteSetlistSong(id)`, `publishSetlist(date)`
-5. New API routes (with proper role auth guards):
-   - `GET /api/setlist?date=` → returns rows; PUBLISHED only without session
-   - `POST /api/setlist` → upserts; requires `SETLIST_ROLES`
-   - `DELETE /api/setlist/[id]` → deletes; requires `SETLIST_ROLES`
-   - `PATCH /api/setlist/[date]/publish` → sets PUBLISHED; requires `SETLIST_ROLES`
-
-**What stays the same:** All `/admin` and `/portal` routes unchanged. `SundayCard` still receives empty `setlist: []`.
-
-**Tests:** Unit tests for `setlist.ts` DB helpers; integration tests for all 4 routes (including role auth rejection for Musician).
+> **Status key:** ✅ Done — ⬜ Not yet built
 
 ---
 
-### MVP 2 — Admin access for MusicCoordinator + WorshipLeader
-**Goal:** Both `MusicCoordinator` and `WorshipLeader` land on `/admin/roster` (read-only). Settings and Audit are blocked. Song selecting roles see "Your Sunday" badge on their assigned Sundays.
+### MVP 1 — Foundation: data layer + TypeScript types ✅ COMPLETE
 
-**Scope:**
-1. Update `src/middleware.ts`:
-   - Extend existing `/admin/` guard to **allow** `MusicCoordinator` and `WorshipLeader` in (both were previously blocked)
-   - Add sub-path blocks inside `/admin/` for both roles: block `/admin/settings` and `/admin/audit` (redirect to `/admin/roster`)
-   - Pages they can read but not write: `/admin/roster`, `/admin/people`, `/admin/songs` — middleware passes through; page derives `canEdit` from role
-   - **No `/wl/:path*` matcher needed — no `/wl/` routes exist**
-2. Update `src/app/admin/login/page.tsx`:
-   - After successful login: `MusicCoordinator` → `/admin/roster`; `WorshipLeader` → `/admin/roster`
-   - `Coordinator` → stays `/admin/roster` (existing, unchanged)
-3. Update `src/app/admin/layout.tsx`:
-   - Hide **Settings** and **Audit** nav items for `MusicCoordinator` and `WorshipLeader` (extend existing Coordinator logic for Settings)
-4. Update `/admin/roster/page.tsx`:
-   - Derive `canEditRoster = !memberLoading && member !== null && (member.app_role === "Admin" || member.app_role === "Coordinator")`
-   - `MusicCoordinator` and `WorshipLeader` see roster grid read-only; no assign/draft/publish roster controls visible
-   - Add "Your Sunday" badge: highlight any Sunday card where the caller's `member_id` matches the `worship_lead` slot
-5. Update `/admin/people/page.tsx` and `/admin/songs/page.tsx`:
-   - Already `canEdit`-gated for `Coordinator`; extend same gate to also exclude `MusicCoordinator` and `WorshipLeader`
+All items shipped and tested.
 
-**Tests:** Middleware routing for all 5 roles (including `MusicCoordinator` and `WorshipLeader` → `/admin/roster`, blocked from `/admin/settings` and `/admin/audit`); render test that both roles see no edit controls on `/admin/roster`; "Your Sunday" badge detection.
+- ✅ Migration `010_worship_lead_types.sql` — no-op SQL; documents WorshipLeader + MusicCoordinator already in DB enum
+- ✅ Migration `011_sunday_setlist.sql` — `CREATE TABLE public.sunday_setlist`
+- ✅ `src/lib/types/database.ts` — `AppRole` includes `"MusicCoordinator"` and `"WorshipLeader"`; `SetlistStatus`; `SetlistSong` has all fields (`chosen_key`, `status`, `created_by`, `created_at`, `updated_at`)
+- ✅ `src/lib/db/setlist.ts` — `getSetlist(date, publishedOnly)`, `upsertSetlistSong(...)`, `deleteSetlistSong(id)`, `publishSetlist(date)`, `revertSetlist(date)`
+- ✅ `GET /api/setlist?date=` — PUBLISHED-only for public; all statuses for `SETLIST_ROLES`
+- ✅ `POST /api/setlist` — upserts song at position; requires `SETLIST_ROLES`
+- ✅ `DELETE /api/setlist/[id]` — removes a slot; requires `SETLIST_ROLES`
+- ✅ `PATCH /api/setlist/[id]/publish` — sets PUBLISHED; requires `SETLIST_ROLES`
+- ✅ `PATCH /api/setlist/[id]/revert` — reverts to DRAFT; requires `SETLIST_ROLES`
 
 ---
 
-### MVP 3 — Song pick mode + draft save (core feature)
+### MVP 2 — Admin access for MusicCoordinator + WorshipLeader — PARTIALLY DONE
+
+**Auth + read-only access:** ✅ Complete
+
+- ✅ `src/middleware.ts` — `ALLOWED_ROLES` includes `WorshipLeader` and `MusicCoordinator` in both Supabase and JWT fallback paths; `RESTRICTED_ROLES` block covers all 3 non-admin roles (Settings + Audit blocked, redirected to `/admin/roster`)
+- ✅ `src/app/admin/layout.tsx` — Settings + Audit hidden from nav for all 3 restricted roles
+- ✅ `src/app/admin/people/page.tsx` — `canEdit` excludes WorshipLeader + MusicCoordinator; Admin members hidden for restricted roles; Add Member dropdown includes Worship Lead + Music Coordinator options
+- ✅ `src/app/admin/songs/page.tsx` — `canEdit` excludes WorshipLeader + MusicCoordinator; replaced broken localStorage role hook with `useCurrentMember()` → `/api/me`
+- ✅ `src/app/admin/roster/page.tsx` — `canEditRoster` gates all roster write controls (assignment selects, Save/Finalise/Revert buttons) to Admin + Coordinator only; WorshipLeader + MusicCoordinator see read-only grid
+
+**Still to build in MVP 2:**
+
+- ⬜ **"Your Sunday" badge on roster cards** — compare caller's `member_id` (from `/api/me`) to the `worship_lead` slot on each Sunday card; highlight matching cards; no badge shown to Admin/Coordinator viewing the full grid
+- ⬜ **Setlist display on roster Sunday cards** — for WL's own Sundays: fetch `GET /api/setlist?date=` and wire results into `SundayCard` `setlist` prop; show DRAFT/PUBLISHED badge + "Select songs" CTA when empty, "Edit songs" when draft/published exists (roster currently passes `setlist: []` for every Sunday)
+
+---
+
+### MVP 3 — Song pick mode + draft save ⬜ NOT STARTED
+
 **Goal:** All song-selecting roles can pick up to 3 songs from `/admin/songs` and save as DRAFT.
 
 **Scope:**
-1. Update `src/app/admin/songs/page.tsx`:
+1. `src/app/admin/songs/page.tsx`:
    - Detect `?picking=1&date=` query params → activate pick mode
-   - Renders sticky selection tray (mobile-first, z-indexed above scroll)
-   - Tray: 3 slots with song title + key chip + × remove; "Done" button
+   - Sticky selection tray at bottom (mobile-first, z-indexed above scroll): 3 slots with song title + key chip + × remove; "Done — Save songs for [date]" button
    - Re-entry: pre-loads existing draft from `GET /api/setlist?date=`
    - "Done" → `POST /api/setlist` for each filled slot → navigate back to `/admin/roster`
-   - Normal songs page behaviour unchanged when params are absent
-2. Update `src/components/song-card.tsx`:
-   - Add optional props: `onSelect?: (song: SongWithCharts) => void`, `isSelected?: boolean`
-   - Renders + / × button only when `onSelect` is provided (zero visual change for existing admin/portal views)
-   - Min 44px tap target on + button
-3. Extend `src/app/admin/roster/page.tsx`:
-   - Fetch `GET /api/setlist?date=` for each Sunday
-   - Merge into Sunday card `setlist` prop
-   - Show DRAFT badge + "Edit songs" + "Publish Songs" buttons for the caller's own assigned Sundays (worship_lead match)
+   - Normal songs page (browse/edit) completely unchanged when params are absent
+2. `src/components/song-card.tsx`:
+   - Add optional `onSelect?: (song: SongWithCharts) => void` and `isSelected?: boolean` props
+   - Renders + / × button only when `onSelect` is provided — zero visual change for admin/portal views that don't pass it
+   - Min 44px tap target on the + button
 
-**Tests:** `SongCard` with/without `onSelect` prop; pick mode tray state management; pick mode absent when no query params; `POST /api/setlist` integration test.
+**Tests:** `SongCard` with/without `onSelect`; tray slot state (add, remove, fill all 3); pick mode absent when no query params; `POST /api/setlist` integration test.
 
 ---
 
-### MVP 4 — Key selection per song
-**Goal:** Worship leaders can specify which key each song should be played in.
+### MVP 4 — Key selection per song ⬜ NOT STARTED
+
+**Goal:** Worship leaders can specify the performance key for each chosen song.
 
 **Scope:**
-1. Tray key chips (in MVP 3 tray) — make tappable:
+1. Make tray key chips tappable:
    - Tap → inline key picker using `ALL_KEYS` from `src/lib/utils/transpose.ts`
-   - Chosen key in React state; saved to `chosen_key` on POST
+   - Selected key held in tray React state; saved to `chosen_key` on "Done" POST
    - No chord charts → chip shows "Original"; key picker disabled
-2. "Preview" affordance: tapping song title in tray opens `ChordSheetModal`; closing with key change updates chip
-3. Portal + admin roster: display `chosen_key ?? chord_charts[0]?.key ?? "Original key"` next to each song
+2. "Preview" affordance: tapping song title in tray opens `ChordSheetModal`; closing with a key change updates chip automatically
+3. Roster + portal: display `chosen_key ?? chord_charts[0]?.key ?? "Original key"` next to each song
 
-**Tests:** Key fallback unit test; key chip tap → picker → save integration test.
+**Tests:** Key fallback unit test (`null` chosen_key → first chart key → "Original key"); key chip tap → picker → update chip; `chosen_key` written on save.
 
 ---
 
-### MVP 5 — Publish + musician PDF
-**Goal:** Published setlists appear on portal; musicians download combined PDF.
+### MVP 5 — Publish + musician PDF ⬜ NOT STARTED
+
+**Goal:** Worship leaders publish song selections; musicians see them on the portal and download a combined PDF.
 
 **Scope:**
-1. Admin roster Songs section — publish flow (worship-leading roles only, on their own Sundays):
-   - `[Save Draft]` re-saves (status → DRAFT)
-   - `[Publish Songs →]` → `PATCH /api/setlist/{date}/publish`
+1. `src/app/admin/roster/page.tsx` — Songs section publish flow (worship-leading role's own Sundays only):
+   - `[Save as Draft]` re-saves (status → DRAFT)
+   - `[Publish Songs →]` → `PATCH /api/setlist/{id}/publish`
    - Badge: DRAFT (amber) → PUBLISHED (green)
-   - Editing after publish re-saves as DRAFT; must re-publish
-2. `GET /api/setlist?date=` public response: only `PUBLISHED` without auth; all statuses for `SETLIST_ROLES`
-3. `src/app/portal/roster/page.tsx`: fetch setlist per Sunday; pass to `SundayCard`
-4. `src/components/sunday-card.tsx`: wire "Download Chord Charts" to `/portal/print/[date]` (new tab); only show button when `setlist.length > 0 && any(status=PUBLISHED)`
-5. New `src/app/portal/print/[date]/page.tsx` — **client-side PDF page:**
-   - Fetches `GET /api/setlist?date=`; fetches `file_url` for each song in browser
-   - Applies `parseChordSheet` + `semitonesBetween` transposition per song
-   - Builds single jsPDF document; auto-downloads on mount
-6. Mirror at `src/app/admin/print/[date]/page.tsx` (authenticated; can share the same component via a shared `PrintSetlistPage` component)
+   - Editing after publish reverts to DRAFT on next save; must re-publish
+2. `src/app/portal/roster/page.tsx` — fetch `GET /api/setlist?date=` per Sunday and pass into `SundayCard` `setlist` prop
+3. `src/components/sunday-card.tsx` — wire "Download Chord Charts" button to `/portal/print/[date]` (new tab); button only visible when `setlist.length > 0 && any song has status=PUBLISHED`
+4. New `src/app/portal/print/[date]/page.tsx` — **client-side PDF page (public):**
+   - Fetches `GET /api/setlist?date=`; fetches `file_url` per song in browser
+   - Applies `parseChordSheet` + `semitonesBetween` transposition to `chosen_key`
+   - Builds single jsPDF document with page breaks; header: `{Title} — Key of {chosen_key}`
+   - Auto-triggers `doc.save("Setlist-{date}.pdf")` on mount; manual button as fallback
+5. Mirror at `src/app/admin/print/[date]/page.tsx` (authenticated, shares the same `PrintSetlistPage` component via a shared module)
 
-> **Why client-side PDF?** jsPDF uses DOM APIs, cannot run in Next.js API routes. Matches existing `ChordSheetModal` Print pattern — no new server infrastructure.
+> **Why client-side PDF?** jsPDF uses DOM APIs and cannot run in Next.js API routes. Matches the existing `ChordSheetModal` print pattern.
 
-**Tests:** Publish endpoint integration; portal `SundayCard` with/without setlist; print page loading + download trigger (mock jsPDF).
+**Tests:** Publish endpoint integration; portal `SundayCard` with/without setlist; print page triggers download (mock jsPDF).
 
 ---
 

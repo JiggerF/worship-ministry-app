@@ -211,13 +211,31 @@ export async function middleware(request: NextRequest) {
         redirectUrl.searchParams.set("reason", "no_audit_access");
         return NextResponse.redirect(redirectUrl);
       }
-      // Block write-action URL patterns on people and songs
-      if ((path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) ||
-          (path.startsWith("/admin/songs") && /add|edit|delete/.test(path))) {
+      // Block write-action URL patterns on people
+      if (path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = path.replace(/(add|edit|delete|deactivate).*/, "");
         redirectUrl.searchParams.set("reason", "readonly");
         return NextResponse.redirect(redirectUrl);
+      }
+      // Block write-action URL patterns on songs
+      // Coordinator has full songs access (add/edit/delete) — skip song blocks
+      // MusicCoordinator can edit songs but not add/delete
+      // WorshipLeader is fully blocked from song write actions
+      if (path.startsWith("/admin/songs") && member.app_role !== "Coordinator") {
+        const isMusicCoordinator = member.app_role === "MusicCoordinator";
+        if (isMusicCoordinator && /add|delete/.test(path)) {
+          const redirectUrl = request.nextUrl.clone();
+          redirectUrl.pathname = path.replace(/(add|delete).*/, "");
+          redirectUrl.searchParams.set("reason", "readonly");
+          return NextResponse.redirect(redirectUrl);
+        }
+        if (!isMusicCoordinator && /add|edit|delete/.test(path)) {
+          const redirectUrl = request.nextUrl.clone();
+          redirectUrl.pathname = path.replace(/(add|edit|delete).*/, "");
+          redirectUrl.searchParams.set("reason", "readonly");
+          return NextResponse.redirect(redirectUrl);
+        }
       }
     }
   }
