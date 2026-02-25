@@ -156,25 +156,28 @@ export default function PortalRosterPage() {
     return getUpcomingSundayISO(parts);
   });
 
-  // MONTHS built from Melbourne time
+  // MONTHS built from the upcoming Sunday's month, not the calendar month.
+  // Once the last Sunday of the current month passes, the upcoming Sunday
+  // falls in the next month, so the left tab shifts forward automatically.
   const MONTHS = useMemo(() => {
-    const parts = getMelbourneNowParts();
-    const { year, month1to12 } = parts;
+    const parsed = safeParseMonth(upcomingSundayISO.slice(0, 7));
+    const year = parsed ? new Date(parsed.year, parsed.monthIndex0, 1).getFullYear() : new Date().getFullYear();
+    const monthIndex0 = parsed ? parsed.monthIndex0 : new Date().getMonth();
 
     const thisMonth = {
-      label: getMonthLabel(year, month1to12 - 1),
-      value: getMonthValue(year, month1to12 - 1),
+      label: getMonthLabel(year, monthIndex0),
+      value: getMonthValue(year, monthIndex0),
     };
 
-    const nextYear = month1to12 === 12 ? year + 1 : year;
-    const nextMonth1 = month1to12 === 12 ? 1 : month1to12 + 1;
+    const nextYear = monthIndex0 === 11 ? year + 1 : year;
+    const nextMonthIndex0 = monthIndex0 === 11 ? 0 : monthIndex0 + 1;
     const nextMonth = {
-      label: getMonthLabel(nextYear, nextMonth1 - 1),
-      value: getMonthValue(nextYear, nextMonth1 - 1),
+      label: getMonthLabel(nextYear, nextMonthIndex0),
+      value: getMonthValue(nextYear, nextMonthIndex0),
     };
 
     return [thisMonth, nextMonth];
-  }, []);
+  }, [upcomingSundayISO]);
 
   // Auto-select the month containing the upcoming Sunday
   const [activeMonth, setActiveMonth] = useState<string>(

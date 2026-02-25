@@ -6,7 +6,7 @@
  * updating the expected list here, these tests will fail loudly.
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/admin/layout";
 
@@ -75,13 +75,14 @@ describe("AdminLayout — Admin nav", () => {
   it("shows all 6 nav links for Admin role", async () => {
     setupMember("Admin");
     renderLayout();
-    // All six pages must be present
-    expect(await screen.findByRole("link", { name: /roster/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /setlist/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /songs/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /people/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /audit log/i })).toBeInTheDocument();
+    // All six pages must be present — scope to sidebar-nav to avoid portal links
+    const nav = await screen.findByTestId("sidebar-nav");
+    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /songs/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /people/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /settings/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /audit log/i })).toBeInTheDocument();
   });
 
   it("Audit Log link points to /admin/audit", async () => {
@@ -104,13 +105,14 @@ describe("AdminLayout — Coordinator nav", () => {
     setupMember("Coordinator");
     renderLayout();
 
-    await screen.findByRole("link", { name: /roster/i });
-    expect(screen.getByRole("link", { name: /setlist/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /songs/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /people/i })).toBeInTheDocument();
+    const nav = await screen.findByTestId("sidebar-nav");
+    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /songs/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /people/i })).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
+      expect(within(nav).queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
     });
   });
@@ -118,7 +120,7 @@ describe("AdminLayout — Coordinator nav", () => {
   it("shows exactly 4 nav links for Coordinator", async () => {
     setupMember("Coordinator");
     renderLayout();
-    await screen.findByRole("link", { name: /roster/i });
+    await screen.findByTestId("sidebar-nav");
     await waitFor(() => {
       // 4 allowed nav links: Roster, Setlist, Songs, People (excludes Settings, Audit Log, and Sign out)
       const navLinks = screen
@@ -134,14 +136,18 @@ describe("AdminLayout — Coordinator nav", () => {
 });
 
 describe("AdminLayout — loading state", () => {
-  it("shows all nav links while member is loading (defaults to showing all)", () => {
-    // Fetch never resolves, so member stays null and loading stays true
+  it("hides restricted nav links while member is loading (secure default)", () => {
+    // Fetch never resolves, so member stays null and loading stays true.
+    // Restricted items must NOT flash while we wait for the role — this is the
+    // security regression guard.
     setupMemberLoading();
     renderLayout();
-    // Before member loads, Coordinator filter hasn't applied — all items visible
-    expect(screen.getByRole("link", { name: /roster/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /audit log/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
+    const nav = screen.getByTestId("sidebar-nav");
+    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+    // Settings and Audit Log must be hidden until role is confirmed as Admin
+    expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
   });
 });
 

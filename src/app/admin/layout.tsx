@@ -35,9 +35,9 @@ function useCurrentMember() {
 }
 
 const SIDEBAR_ITEMS = [
-  { href: "/admin/roster", label: "Roster", icon: "📋" },
+  { href: "/admin/roster", label: "Roster Manager", icon: "📋" },
   { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
-  { href: "/admin/songs", label: "Songs", icon: "🎵" },
+  { href: "/admin/songs", label: "Song Manager", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
   { href: "/admin/audit", label: "Audit Log", icon: "🔍" },
@@ -57,12 +57,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return <>{children}</>;
   }
 
-  // Hide Settings and Audit Log nav for Coordinator, WorshipLeader, MusicCoordinator
-  // Only filter once role is confirmed (memberLoading guard prevents flash)
-  const isRestricted = !memberLoading && member !== null && RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number]);
-  const filteredSidebar = isRestricted
-    ? SIDEBAR_ITEMS.filter((item) => !RESTRICTED_NAV_HIDDEN.includes(item.href))
-    : SIDEBAR_ITEMS;
+  // Show restricted nav items (Settings, Audit Log) only once the role is
+  // confirmed as non-restricted. While loading or on fetch failure, default to
+  // hiding them — never flash privileged links to restricted users.
+  const showAll = !memberLoading && member !== null && !RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number]);
+  const filteredSidebar = showAll
+    ? SIDEBAR_ITEMS
+    : SIDEBAR_ITEMS.filter((item) => !RESTRICTED_NAV_HIDDEN.includes(item.href));
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -75,7 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <p className="text-xs text-gray-600">Rostering Admin</p>
         </div>
 
-        <nav className="flex-1 p-2">
+        <nav className="flex-1 p-2" data-testid="sidebar-nav">
           {filteredSidebar.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -94,6 +95,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
+
+        {/* Portal quick-links */}
+        <div className="px-2 pb-2 border-b border-gray-200">
+          <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            Portal
+          </p>
+          {[
+            { href: "/portal/roster", label: "Roster", icon: "📋" },
+            { href: "/portal/songs", label: "Song Library", icon: "🎵" },
+          ].map(({ href, label, icon }) => (
+            <a
+              key={href}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-0.5"
+            >
+              <span>{icon}</span>
+              {label}
+              <span className="ml-auto text-gray-300 text-xs">↗</span>
+            </a>
+          ))}
+        </div>
 
         <div className="p-4 border-t border-gray-200">
           <div className="flex items-center gap-2">

@@ -354,7 +354,7 @@ export default function AdminRosterPage() {
     <div className="space-y-4">
 
       {/* Page Title */}
-      <h1 className="text-xl font-bold text-gray-900">Worship Ministry Rostering</h1>
+      <h1 className="text-xl font-bold text-gray-900">Roster Manager</h1>
 
       {/* Month Navigation + Status */}
       <div className="flex items-center justify-between gap-4">
