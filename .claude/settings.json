@@ -6,7 +6,9 @@
       "Bash(npx vitest run:*)",
       "Bash(./node_modules/.bin/vitest:*)",
       "Bash(ls:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)"
     ]
   }
 }

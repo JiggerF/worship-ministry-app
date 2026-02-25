@@ -795,22 +795,25 @@ export default function AdminSetlistPage() {
 
   // ─────────────────────────────────────────────
   // Edit permission
-  // WL can only edit if they are the assigned worship lead for this Sunday.
-  // Admin, MusicCoordinator, and Coordinator always have edit access.
+  // MusicCoordinator and WorshipLeader can only edit if they are the assigned
+  // worship lead for this Sunday. Admin and Coordinator always have edit access.
   // Default to false (restrictive) while loading.
   // ─────────────────────────────────────────────
+  const isWorshipLeadRole =
+    currentMember?.app_role === "WorshipLeader" ||
+    currentMember?.app_role === "MusicCoordinator";
+
   const canEdit =
     !memberLoading &&
     currentMember !== null &&
     (currentMember.app_role === "Admin" ||
       currentMember.app_role === "Coordinator" ||
-      currentMember.app_role === "MusicCoordinator" ||
-      (currentMember.app_role === "WorshipLeader" &&
+      (isWorshipLeadRole &&
         currentMember.id === worshipLeadMemberId));
 
   const isViewOnlyWL =
     !memberLoading &&
-    currentMember?.app_role === "WorshipLeader" &&
+    isWorshipLeadRole &&
     !canEdit;
 
   // ─────────────────────────────────────────────

@@ -3,11 +3,20 @@
  * Integration tests — GET /api/songs & POST /api/songs
  * src/app/api/songs/route.ts
  *
- * Tests portal scope filtering, Coordinator block, title validation,
- * and DB error propagation.
+ * Tests portal scope filtering, role-based authorisation (Admin-only create),
+ * title validation, and DB error propagation.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeNextRequest } from "./_helpers";
+
+// ── Mock getActorFromRequest ──
+const mockGetActor = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" })
+);
+
+vi.mock("@/lib/server/get-actor", () => ({
+  getActorFromRequest: mockGetActor,
+}));
 
 // ── Build mock via vi.hoisted so references are valid inside vi.mock factory ──
 const { mockQuery, mockFrom, mockClient } = vi.hoisted(() => {
@@ -62,6 +71,8 @@ beforeEach(() => {
   });
   mockFrom.mockReturnValue(mockQuery);
   setupSuccessMock();
+  // Default: Admin actor
+  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -104,23 +115,76 @@ describe("GET /api/songs", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/songs
+// POST /api/songs — authorisation
 // ─────────────────────────────────────────────────────────────────────────────
 describe("POST /api/songs — authorisation", () => {
-  it("returns 403 for Coordinator role", async () => {
+  it("allows Coordinator to create songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "coord-1", name: "Coordinator", role: "Coordinator" });
+    const createdSong = { id: "s-coord", title: "New Song", status: "published" };
+    mockQuery.then = (resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data: createdSong, error: null }).then(resolve);
+
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/songs",
-      headers: { "x-app-role": "Coordinator" },
+      body: { title: "New Song" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 403 for MusicCoordinator role (cannot add songs)", async () => {
+    mockGetActor.mockResolvedValue({ id: "mc-1", name: "Music Coord", role: "MusicCoordinator" });
+    const req = makeNextRequest({
+      method: "POST",
+      url: "http://localhost/api/songs",
       body: { title: "New Song" },
     });
     const res = await POST(req);
     expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toMatch(/coordinator/i);
+  });
+
+  it("returns 403 for WorshipLeader role", async () => {
+    mockGetActor.mockResolvedValue({ id: "wl-1", name: "Worship Leader", role: "WorshipLeader" });
+    const req = makeNextRequest({
+      method: "POST",
+      url: "http://localhost/api/songs",
+      body: { title: "New Song" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 403 when unauthenticated (no actor)", async () => {
+    mockGetActor.mockResolvedValue(null);
+    const req = makeNextRequest({
+      method: "POST",
+      url: "http://localhost/api/songs",
+      body: { title: "New Song" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(403);
+  });
+
+  it("allows Admin to create songs", async () => {
+    mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin", role: "Admin" });
+    const createdSong = { id: "s-new", title: "New Song", status: "published" };
+    mockQuery.then = (resolve: (v: unknown) => unknown) =>
+      Promise.resolve({ data: createdSong, error: null }).then(resolve);
+
+    const req = makeNextRequest({
+      method: "POST",
+      url: "http://localhost/api/songs",
+      body: { title: "New Song" },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(200);
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/songs — validation
+// ─────────────────────────────────────────────────────────────────────────────
 describe("POST /api/songs — validation", () => {
   it("returns 400 when title is missing", async () => {
     const req = makeNextRequest({
@@ -143,6 +207,9 @@ describe("POST /api/songs — validation", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/songs — success path
+// ─────────────────────────────────────────────────────────────────────────────
 describe("POST /api/songs — success path", () => {
   it("returns 200 with created song", async () => {
     const createdSong = { id: "s-new", title: "New Song", status: "published" };
@@ -162,6 +229,9 @@ describe("POST /api/songs — success path", () => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/songs — DB error propagation
+// ─────────────────────────────────────────────────────────────────────────────
 describe("POST /api/songs — DB error propagation", () => {
   it("returns 500 when Supabase insert fails", async () => {
     mockQuery.then = (resolve: (v: unknown) => unknown) =>
