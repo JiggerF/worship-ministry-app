@@ -893,7 +893,7 @@ export default function AdminSetlistPage() {
         <div className="px-5 py-4 space-y-3">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
-              🎵 Songlist
+              🎵 Setlist
             </span>
             <div className="flex-1 h-px bg-gray-100" />
             {freeSlots > 0 && (
