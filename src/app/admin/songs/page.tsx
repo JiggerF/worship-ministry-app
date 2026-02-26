@@ -272,8 +272,8 @@ export default function AdminSongsPage() {
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-black">Song Manager</h1>
-            <p className="text-sm text-gray-700">Manage worship songs and chord charts</p>
+            <h1 className="text-2xl font-bold text-gray-900">Song Manager</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Manage worship songs and chord charts</p>
           </div>
           <div className="flex gap-3">
             {canAddDeleteSong && (

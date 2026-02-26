@@ -354,7 +354,10 @@ export default function AdminRosterPage() {
     <div className="space-y-4">
 
       {/* Page Title */}
-      <h1 className="text-xl font-bold text-gray-900">Roster Manager</h1>
+      <div className="mb-2">
+        <h1 className="text-2xl font-bold text-gray-900">Roster Manager</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Schedule and assign musicians for each Sunday</p>
+      </div>
 
       {/* Month Navigation + Status */}
       <div className="flex items-center justify-between gap-4">
