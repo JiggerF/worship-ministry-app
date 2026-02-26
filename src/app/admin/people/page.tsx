@@ -242,10 +242,8 @@ export default function AdminPeoplePage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">People</h1>
-          <p className="text-sm text-gray-500">
-            {activeMembers.length} active member{activeMembers.length !== 1 ? "s" : ""}
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">People</h1>
+          <p className="text-sm text-gray-500 mt-0.5">View and manage worship team members</p>
         </div>
         {canEdit && (
           <button

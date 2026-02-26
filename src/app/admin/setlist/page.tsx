@@ -821,26 +821,39 @@ export default function AdminSetlistPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-xl font-bold text-gray-900">Setlist</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Select songs for each Sunday service
-        </p>
+        <h1 className="text-2xl font-bold text-gray-900">Setlist</h1>
+        <p className="text-sm text-gray-500 mt-0.5">Curate song selections for upcoming services</p>
       </div>
 
       {/* Sunday selector */}
       <div>
-        <select
-          aria-label="Service date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className={`${styles.selectDarkText} w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900`}
-        >
-          {upcomingSundays.map((iso) => (
-            <option key={iso} value={iso}>
-              {myWLDates.has(iso) ? `⭐ ${formatSundayLabel(iso)}` : formatSundayLabel(iso)}
-            </option>
-          ))}
-        </select>
+        <div className="relative">
+          <select
+            aria-label="Service date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className={`${styles.selectDarkText} w-full px-3 py-2.5 pr-9 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 appearance-none`}
+          >
+            {upcomingSundays.map((iso) => (
+              <option key={iso} value={iso}>
+                {myWLDates.has(iso) ? `⭐ ${formatSundayLabel(iso)}` : formatSundayLabel(iso)}
+              </option>
+            ))}
+          </select>
+          <svg
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </div>
+        <p className="mt-1.5 text-xs text-gray-400">Select a Sunday to manage its setlist</p>
 
         {/* Contextual pill — shown when the selected Sunday is one the user is leading */}
         {myWLDates.has(selectedDate) && (
@@ -865,7 +878,7 @@ export default function AdminSetlistPage() {
               <RosterBadge status={isPublished ? "LOCKED" : "DRAFT"} />
             )}
           </div>
-          <p className="text-lg font-semibold text-gray-900 mt-1">
+          <p className="text-xl font-bold text-gray-900 mt-1">
             {selectedDate
               ? new Date(selectedDate + "T12:00:00Z").toLocaleDateString("en-AU", {
                   weekday: "long",
@@ -876,12 +889,12 @@ export default function AdminSetlistPage() {
               : "—"}
           </p>
           {worshipLeadName && (
-            <p className="text-sm text-gray-700 mt-1">
-              <span className="font-medium">Worship Lead:</span> {worshipLeadName}
+            <p className="text-sm text-gray-500 mt-1">
+              Worship Lead: <span className="font-semibold text-gray-900">{worshipLeadName}</span>
             </p>
           )}
           {isViewOnlyWL && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 max-w-xs">
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2 whitespace-nowrap w-fit">
               You are not the Worship Lead for this Sunday. View only.
             </p>
           )}

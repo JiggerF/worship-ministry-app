@@ -54,8 +54,8 @@ export default function AdminSettingsPage() {
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-black">Settings</h1>
-            <p className="text-sm text-gray-700">Application configuration and feature flags.</p>
+            <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Application configuration and feature flags</p>
           </div>
         </div>
 

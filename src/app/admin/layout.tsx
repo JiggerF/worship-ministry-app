@@ -81,10 +81,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-sm font-bold text-gray-900">
-            Worship Ministry
-          </h1>
-          <p className="text-xs text-gray-600">Rostering Admin</p>
+          <h1 className="text-base font-bold text-gray-900">Worship Ministry</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Ministry Admin</p>
         </div>
 
         <nav className="p-2" data-testid="sidebar-nav">

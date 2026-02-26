@@ -1373,4 +1373,4 @@ Use this to decide between the three approaches:
 | Vendor lock-in concern? | Accept Anthropic | Accept Momentic | Accept OpenAI |
 | Monthly cost target? | $100-170 | Quote-based | $19-60 |
 
-**Our recommendation:** Start with **Claude + MCP** (Phase 1, already documented). Evaluate **Momentic** when the team grows to 3+ developers. Keep **DIY (Codex + MCP)** as the fallback if costs need to be minimized.
+**Our recommendation:** Start with **Claude + MCP** (Phase 1, already documented). Evaluate **Momentic** when the team grows to 3+ developers. Keep **DIY (Codex + MCP)** as the fallback if costs need to be  minimized.
