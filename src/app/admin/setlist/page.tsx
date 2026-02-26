@@ -266,8 +266,6 @@ function SongPickerModal({ open, maxPicks, existingIds, onClose, onConfirm }: So
             const alreadyInSetlist = existingIds.has(song.id);
             const isPicked = picked.has(song.id);
             const isDisabled = alreadyInSetlist || (!isPicked && picked.size >= maxPicks);
-            const chartsWithFiles = song.chord_charts?.filter((c) => c.file_url) ?? [];
-
             return (
               <div
                 key={song.id}

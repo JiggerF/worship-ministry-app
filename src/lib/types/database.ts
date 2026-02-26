@@ -171,7 +171,9 @@ export type AuditAction =
   | "update_setlist"
   | "delete_setlist_song"
   | "publish_setlist"
-  | "revert_setlist";
+  | "revert_setlist"
+  | "login"
+  | "logout";
 
 export interface AuditLogRow {
   id: string;

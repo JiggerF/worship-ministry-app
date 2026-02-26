@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { Member } from "@/lib/types/database";
 
@@ -50,6 +50,7 @@ const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { member, loading: memberLoading } = useCurrentMember();
 
   // Don't show sidebar on login page
@@ -64,6 +65,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const filteredSidebar = showAll
     ? SIDEBAR_ITEMS
     : SIDEBAR_ITEMS.filter((item) => !RESTRICTED_NAV_HIDDEN.includes(item.href));
+
+  async function handleSignOut() {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {
+      // ignore network failures — redirect regardless
+    }
+    router.replace("/admin/login");
+    router.refresh();
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -133,14 +144,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex items-center gap-3">
               <span className="text-sm font-medium text-gray-900">{member.name}</span>
               <span className="px-2 py-0.5 rounded text-xs font-semibold bg-yellow-50 text-yellow-700">{member.app_role}</span>
-              <Link href="/admin/login" className="text-xs text-gray-500 hover:text-gray-700">
+              <button onClick={handleSignOut} className="text-xs text-gray-500 hover:text-gray-700 bg-transparent border-none cursor-pointer p-0">
                 Sign out
-              </Link>
+              </button>
             </div>
           ) : (
-            <Link href="/admin/login" className="text-xs text-gray-500 hover:text-gray-700">
+            <button onClick={handleSignOut} className="text-xs text-gray-500 hover:text-gray-700 bg-transparent border-none cursor-pointer p-0">
               Sign out
-            </Link>
+            </button>
           )}
         </header>
 

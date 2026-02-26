@@ -12,7 +12,7 @@ export interface CreateAuditLogEntry {
   actor_name: string;
   actor_role: string;
   action: AuditAction;
-  entity_type: "song" | "roster" | "setlist";
+  entity_type: "song" | "roster" | "setlist" | "auth";
   entity_id?: string | null;
   summary: string;
 }
