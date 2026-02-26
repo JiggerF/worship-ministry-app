@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "../../styles.module.css";
-import { supabase } from "@/lib/supabase";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -21,45 +20,25 @@ export default function AdminLoginPage() {
     setError(null);
     setLoading(true);
 
-    const res = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (res.error) {
-      setError(res.error.message);
-      return;
-    }
-
-    // Persist tokens into cookies so the server-side middleware (createServerClient)
-    // can read the session on subsequent requests. This is a testing-friendly
-    // approach — in production you should set secure, httpOnly cookies from the
-    // server after exchanging credentials.
     try {
-      let session: { access_token?: string; refresh_token?: string } | null = null;
-      if (res.data && typeof res.data === "object") {
-        if ('session' in res.data && res.data.session) {
-          session = res.data.session;
-        } else if ('user' in res.data && 'session' in res.data && res.data.session) {
-          session = res.data.session;
-        }
-      }
-      if (session && typeof document !== "undefined") {
-        const access = session.access_token;
-        const refresh = session.refresh_token;
-        document.cookie = `sb-access-token=${access}; path=/`;
-        document.cookie = `sb-refresh-token=${refresh}; path=/`;
-        try {
-          const serialized = encodeURIComponent(JSON.stringify(session));
-          document.cookie = `sb:token=${serialized}; path=/`;
-        } catch {
-          // ignore
-        }
+      // POST to server-side login route — sets cookies server-side and writes
+      // a login audit event for all app_roles.
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Sign in failed. Please try again.");
+        return;
       }
     } catch {
-      // ignore cookie set errors
+      setError("Network error. Please check your connection and try again.");
+      return;
+    } finally {
+      setLoading(false);
     }
 
     // Ensure middleware + SSR re-evaluate auth state.

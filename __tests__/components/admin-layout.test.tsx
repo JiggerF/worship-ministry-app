@@ -13,6 +13,7 @@ import AdminLayout from "@/app/admin/layout";
 // ── Mock next/navigation ──────────────────────────────────────────────────────
 vi.mock("next/navigation", () => ({
   usePathname: vi.fn(() => "/admin/roster"),
+  useRouter: vi.fn(() => ({ replace: vi.fn(), refresh: vi.fn() })),
 }));
 
 // ── Mock next/link (renders as <a> in tests) ──────────────────────────────────
@@ -177,8 +178,9 @@ describe("AdminLayout — profile section", () => {
     setupMember("Admin");
     renderLayout();
     await screen.findByText("Test User");
-    // Role badge is rendered as a <span> alongside the name
-    expect(screen.getByText("Admin")).toBeInTheDocument();
+    // Role badge is a <span> with additional styling — check it appears within the header
+    const header = screen.getByRole("banner");
+    expect(within(header).getByText("Admin")).toBeInTheDocument();
   });
 
   it("shows the role badge for Coordinator role", async () => {
@@ -196,15 +198,14 @@ describe("AdminLayout — profile section", () => {
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
   });
 
-  it("shows the Sign out link after member data loads", async () => {
+  it("shows the Sign out button after member data loads", async () => {
     setupMember("Admin");
     renderLayout();
-    const signOut = await screen.findByRole("link", { name: /sign out/i });
+    const signOut = await screen.findByRole("button", { name: /sign out/i });
     expect(signOut).toBeInTheDocument();
-    expect(signOut).toHaveAttribute("href", "/admin/login");
   });
 
-  it("shows Sign out link (without name) when /api/me returns non-ok", async () => {
+  it("shows Sign out button (without name) when /api/me returns non-ok", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, json: async () => null })
@@ -215,10 +216,10 @@ describe("AdminLayout — profile section", () => {
       expect(screen.queryByText("—")).not.toBeInTheDocument()
     );
     expect(screen.queryByText("Test User")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
 
-  it("shows Sign out link when /api/me fetch throws a network error", async () => {
+  it("shows Sign out button when /api/me fetch throws a network error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     renderLayout();
     // Wait for loading state to finish (catch handler calls setLoading(false))
@@ -226,6 +227,6 @@ describe("AdminLayout — profile section", () => {
       expect(screen.queryByText("—")).not.toBeInTheDocument()
     );
     expect(screen.queryByText("Test User")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /sign out/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
 });

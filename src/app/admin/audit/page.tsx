@@ -60,6 +60,8 @@ const ACTION_LABELS: Record<AuditAction, string> = {
   delete_setlist_song: "Removed song from setlist",
   publish_setlist: "Published setlist",
   revert_setlist: "Reverted setlist to draft",
+  login: "Signed in",
+  logout: "Signed out",
 };
 
 const ACTION_COLORS: Record<AuditAction, string> = {
@@ -74,6 +76,8 @@ const ACTION_COLORS: Record<AuditAction, string> = {
   delete_setlist_song: "bg-red-100 text-red-800",
   publish_setlist: "bg-purple-100 text-purple-800",
   revert_setlist: "bg-orange-100 text-orange-800",
+  login: "bg-teal-100 text-teal-800",
+  logout: "bg-gray-100 text-gray-700",
 };
 
 export default function AuditPage() {
