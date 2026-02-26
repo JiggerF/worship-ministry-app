@@ -110,10 +110,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* Portal quick-links — below admin nav */}
+        {/* Musician View quick-links — below admin nav */}
         <div className="px-2 pt-2 pb-2 border-t border-gray-200">
           <p className="px-3 pt-1 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-            Portal
+            Musician View
           </p>
           {[
             { href: "/portal/roster", label: "Roster", icon: "📋" },
@@ -127,8 +127,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-700 transition-colors mb-0.5"
             >
               <span>{icon}</span>
-              {label}
-              <span className="ml-auto text-gray-300 text-xs">↗</span>
+              <span className="flex flex-col min-w-0">
+                <span>{label}</span>
+                <span className="text-[10px] font-normal text-gray-400 leading-tight">opens in new tab</span>
+              </span>
+              <span className="ml-auto text-gray-300 text-xs flex-shrink-0">↗</span>
             </a>
           ))}
         </div>
