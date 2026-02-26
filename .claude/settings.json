@@ -8,7 +8,10 @@
       "Bash(ls:*)",
       "Bash(npm install:*)",
       "Bash(npm run lint:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Read(//Users/jiggerfantonial/.claude/**)",
+      "Bash(wc:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
