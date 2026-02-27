@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import jsPDF from "jspdf";
 import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
-import { ALL_KEYS } from "@/lib/utils/transpose";
+import { ALL_KEYS, normalizeKey, semitonesBetween, parseChordSheet } from "@/lib/utils/transpose";
 import { SONG_CATEGORIES, CATEGORY_LABEL_MAP } from "@/lib/constants/categories";
 import type { SongWithCharts, SetlistSongWithDetails, SongCategory, SongStatus, MemberWithRoles } from "@/lib/types/database";
 import { SongStatusBadge, RosterBadge } from "@/components/status-badge";
@@ -496,6 +497,9 @@ export default function AdminSetlistPage() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
 
+  // ── PDF download ─────────────────────────────
+  const [isDownloading, setIsDownloading] = useState(false);
+
   // ─────────────────────────────────────────────
   // Fetch setlist for selected date
   // ─────────────────────────────────────────────
@@ -759,6 +763,98 @@ export default function AdminSetlistPage() {
     result.splice(toIdx, 0, moved);
     return result;
   }, [sortedRows, draggedId, dragOverId]);
+
+  // ─────────────────────────────────────────────
+  // PDF bundle download
+  // ─────────────────────────────────────────────
+  const downloadableSongs = useMemo(() =>
+    sortedRows
+      .filter((row) => (row.song?.chord_charts ?? []).some((c) => c.file_url))
+      .sort((a, b) => a.position - b.position),
+    [sortedRows]
+  );
+
+  const hasDownloadableCharts = downloadableSongs.length > 0;
+
+  const handleDownloadAll = useCallback(async () => {
+    if (!hasDownloadableCharts || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      const fetchTasks = downloadableSongs.map((item) => {
+        const charts = item.song?.chord_charts ?? [];
+        const chosenKey = item.chosen_key;
+        let chart = chosenKey ? charts.find((c) => c.file_url && c.key === chosenKey) : null;
+        if (!chart) chart = charts.find((c) => c.file_url) ?? null;
+        if (!chart || !chart.file_url) return null;
+        const targetKey = chosenKey ?? chart.key;
+        return { songTitle: item.song?.title ?? "Unknown", chartKey: chart.key, targetKey, fileUrl: chart.file_url };
+      }).filter((t): t is NonNullable<typeof t> => t !== null);
+
+      const results = await Promise.all(
+        fetchTasks.map(async (task) => {
+          const res = await fetch(`/api/chord-sheet?url=${encodeURIComponent(task.fileUrl)}`);
+          const data = await res.json();
+          if (data.error || !data.text) return { ...task, text: null };
+          return { ...task, text: data.text as string };
+        })
+      );
+
+      const successful = results.filter((r) => r.text !== null);
+      if (successful.length === 0) return;
+
+      const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const marginX = 40;
+      const marginBottom = 50;
+
+      successful.forEach((song, songIdx) => {
+        if (songIdx > 0) doc.addPage();
+        let y = 50;
+        const normalizedTarget = normalizeKey(song.targetKey);
+        const title = `${song.songTitle} — Key of ${normalizedTarget}`;
+        doc.setFont("Courier", "bold");
+        doc.setFontSize(18);
+        doc.setTextColor(0, 0, 0);
+        doc.text(title, marginX, y);
+        y += 28;
+        const semitones = semitonesBetween(normalizeKey(song.chartKey), normalizedTarget);
+        const lines = parseChordSheet(song.text!, semitones, normalizedTarget);
+        doc.setFontSize(12);
+        for (const line of lines) {
+          if (y > pageHeight - marginBottom) { doc.addPage(); y = 50; }
+          if (line.type === "empty") {
+            y += 12;
+          } else if (line.type === "section") {
+            doc.setFont("Courier", "bold");
+            doc.setTextColor(55, 65, 81);
+            doc.text(line.display, marginX, y);
+            y += 18;
+          } else if (line.type === "chord") {
+            doc.setFont("Courier", "bold");
+            doc.setTextColor(180, 83, 9);
+            doc.text(line.display, marginX, y);
+            y += 16;
+          } else {
+            doc.setFont("Courier", "normal");
+            doc.setTextColor(33, 37, 41);
+            const splitLines = doc.splitTextToSize(line.display, pageWidth - marginX * 2);
+            for (const sl of splitLines) {
+              if (y > pageHeight - marginBottom) { doc.addPage(); y = 50; }
+              doc.text(sl, marginX, y);
+              y += 15;
+            }
+          }
+        }
+      });
+
+      const d = new Date(selectedDate + "T12:00:00Z");
+      const dateLabel = d.toLocaleDateString("en-AU", { day: "2-digit", month: "short", year: "numeric" }).replace(/ /g, "-");
+      doc.save(`Chord-Charts-${dateLabel}.pdf`);
+    } finally {
+      setIsDownloading(false);
+    }
+  }, [hasDownloadableCharts, isDownloading, downloadableSongs, selectedDate]);
 
   // ─────────────────────────────────────────────
   // Persist new position order
@@ -1073,6 +1169,20 @@ export default function AdminSetlistPage() {
           )}
         </div>
       </div>
+
+          {/* Download PDF Bundle — visible to all when chord charts exist */}
+      {hasDownloadableCharts && (
+        <div className="flex justify-start mt-4">
+          <button
+            onClick={handleDownloadAll}
+            disabled={isDownloading}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+          >
+            <span>⬇</span>
+            {isDownloading ? "Generating PDF…" : "Download PDF Bundle"}
+          </button>
+        </div>
+      )}
 
           {/* Bottom action buttons — matches roster page layout */}
       {canEdit && (

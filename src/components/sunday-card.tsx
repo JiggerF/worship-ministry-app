@@ -234,8 +234,8 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
 
   return (
     <div
-      className={`rounded-xl border-2 bg-white p-5 ${
-        isNext ? "border-gray-400" : "border-border"
+      className={`rounded-xl bg-white p-5 ${
+        isNext ? "border-2 border-black" : "border-0"
       } ${isEmpty ? "opacity-60" : ""}`}
     >
       {/* "Upcoming" label */}

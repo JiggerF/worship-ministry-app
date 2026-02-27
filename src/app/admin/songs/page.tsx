@@ -373,7 +373,7 @@ export default function AdminSongsPage() {
                     <tr><td colSpan={8} className="p-6 text-center text-gray-500">No songs</td></tr>
                   ) : (
                     paginated.map((song) => (
-                      <tr key={song.id} className="border-t">
+                      <tr key={song.id} className="border-t border-gray-200">
                         <td className="px-3 py-3 font-medium text-gray-800">{song.title}</td>
                         <td className="px-3 py-3 text-gray-800">{song.artist ?? "—"}</td>
                         <td className="px-3 py-3"><SongStatusBadge status={song.status} /></td>

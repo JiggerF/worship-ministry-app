@@ -47,14 +47,14 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4 py-12">
       <div className="max-w-sm w-full">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-gray-900">
-            WCC Worship Ministry Admin
+            WORDCC Worship Ministry
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Sign in to manage the roster
+            Sign in to manage the worship workflow.
           </p>
         </div>
 
@@ -104,6 +104,26 @@ export default function AdminLoginPage() {
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="mt-10 text-center px-2">
+          <div className="border-t border-gray-200 pt-8 space-y-3">
+            <p className="text-sm italic text-gray-500 leading-relaxed">
+              &ldquo;Worthy is the Lamb who was slain,
+              <br />
+              to receive power and wealth and wisdom and might
+              <br />
+              and honor and glory and blessing!&rdquo;
+            </p>
+            <p className="text-sm italic text-gray-500 leading-relaxed">
+              &ldquo;To him who sits on the throne and to the Lamb
+              <br />
+              be blessing and honor and glory and might forever and ever!&rdquo;
+            </p>
+            <p className="text-xs text-gray-400 mt-2 font-medium tracking-wide uppercase">
+              Revelation 5:12–13
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
