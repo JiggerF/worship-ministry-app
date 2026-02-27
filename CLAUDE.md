@@ -1,4 +1,4 @@
-# CLAUDE.md — WCC Worship Ministry Admin
+# CLAUDE.md — WORDCC Worship Ministry
 
 ## Project Overview
 A Next.js admin app for the WCC Worship Ministry team. Manages rostering, song tracking, member profiles, and availability. Accessed only by authenticated Admin and Coordinator users.

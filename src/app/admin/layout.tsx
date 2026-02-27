@@ -40,6 +40,7 @@ const SIDEBAR_ITEMS = [
   { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
   { href: "/admin/songs", label: "Song Manager", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
+  { href: "/admin/help", label: "Help", icon: "❓" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
   { href: "/admin/audit", label: "Audit Log", icon: "🔍" },
 ];

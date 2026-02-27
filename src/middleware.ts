@@ -76,7 +76,7 @@ export async function middleware(request: NextRequest) {
         const sbTokenCookie = request.cookies.get('sb:token')?.value;
         if (sbTokenCookie) {
           try {
-            const parsed = JSON.parse(sbTokenCookie);
+            const parsed = JSON.parse(decodeURIComponent(sbTokenCookie));
             email = parsed?.user?.email ?? null;
             if (isDev) console.log('MIDDLEWARE: parsed sb:token ->', { email });
           } catch (e) {
