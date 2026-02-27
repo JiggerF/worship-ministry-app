@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ROSTER_COLUMN_ORDER, ROLE_LABEL_MAP, ROLES } from "@/lib/constants/roles";
 import { getSundaysInMonth, toISODate } from "@/lib/utils/dates";
 import { RosterBadge } from "@/components/status-badge";
@@ -74,6 +75,9 @@ function monthToNumber(yearMonth: string) {
 
 export default function AdminRosterPage() {
   const { member, loading: memberLoading } = useCurrentMember();
+  const router = useRouter();
+  const routerRef = useRef(router);
+  useEffect(() => { routerRef.current = router; }, [router]);
   // Only Admin and Coordinator can edit the roster grid.
   // Default to false (restrictive) while loading to prevent flash of edit controls.
   const canEditRoster = !memberLoading && member !== null &&
@@ -88,15 +92,89 @@ export default function AdminRosterPage() {
   const [reverting, setReverting] = useState(false);
   const [monthNotes, setMonthNotes] = useState("");
   const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [saveToast, setSaveToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  // A deferred action (navigation or month switch) waiting for user confirmation
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  // Ref mirrors isDirty so mount-only effects always read the live value
+  const isDirtyRef = useRef(false);
+  const [availabilityMap, setAvailabilityMap] = useState<Record<string, Record<string, boolean>>>({});
+  // Navigation upper bound — starts at T+2, extended if an open period ends later
+  const currentMonth = getCurrentMonth();
+  const [maxMonth, setMaxMonth] = useState(() => addMonths(currentMonth, 2));
+
+  function showToast(message: string, type: "success" | "error" = "success") {
+    setSaveToast({ message, type });
+    setTimeout(() => setSaveToast(null), 3000);
+  }
+
+  // Keep ref in sync so mount-only effects always read the latest isDirty value
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+
+  // Unsaved-changes guard — installed once on mount
+  useEffect(() => {
+    // 1. Browser close / refresh
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    // 2. In-app navigation: intercept anchor clicks in capture phase BEFORE Next.js sees them.
+    //    This is more reliable than patching window.history.pushState because Next.js App Router
+    //    uses React transitions that can bypass or reorder pushState calls.
+    const handleAnchorClick = (e: MouseEvent) => {
+      if (!isDirtyRef.current) return;
+      const anchor = (e.target as Element).closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || href === window.location.pathname) return;
+      // Only intercept same-origin in-app links
+      if (anchor.target === "_blank") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setPendingAction(() => () => routerRef.current.push(href));
+    };
+    document.addEventListener("click", handleAnchorClick, true); // capture phase
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("click", handleAnchorClick, true);
+    };
+  }, []); // mount-only — reads isDirtyRef; no stale closure risk
+
+  // On mount: fetch open availability periods, extend maxMonth, and jump activeMonth
+  // to the earliest open period's start month (so Feb/Mar finalized months are skipped).
+  useEffect(() => {
+    fetch("/api/availability/periods")
+      .then((r) => r.ok ? r.json() : [])
+      .then((periods: Array<{ starts_on: string; ends_on: string; closed_at: string | null }>) => {
+        const open = (periods ?? []).filter((p) => !p.closed_at);
+        if (open.length === 0) return;
+
+        const startMonths = open.map((p) => p.starts_on.slice(0, 7)).sort();
+        const endMonths   = open.map((p) => p.ends_on.slice(0, 7)).sort();
+        const earliest = startMonths[0];
+        const latest   = endMonths.at(-1)!;
+
+        // Jump to the first open period's month if it's after the current month
+        if (earliest > currentMonth) setActiveMonth(earliest);
+
+        const defaultMax = addMonths(currentMonth, 2);
+        if (latest > defaultMax) setMaxMonth(latest);
+      })
+      .catch(() => { /* keep defaults */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ----------------------------- */
   /* Load Roster                   */
   /* ----------------------------- */
 
   // Navigation bounds relative to today
-  const currentMonth = getCurrentMonth();
   const minMonth = addMonths(currentMonth, -6);
-  const maxMonth = addMonths(currentMonth, 2);
+  // maxMonth is state — computed once on mount from open availability periods
 
 
   async function loadRoster() {
@@ -221,8 +299,44 @@ export default function AdminRosterPage() {
       }
     }
 
+    async function loadAvailability() {
+      try {
+        const [y, mo] = activeMonth.split("-").map(Number);
+        const firstDay = `${activeMonth}-01`;
+        const lastDayDate = new Date(y, mo, 0);
+        const lastDay = `${y}-${String(mo).padStart(2, "0")}-${String(lastDayDate.getDate()).padStart(2, "0")}`;
+
+        const periodsRes = await fetch("/api/availability/periods");
+        if (!periodsRes.ok) return;
+        const allPeriods: Array<{ id: string; starts_on: string; ends_on: string; closed_at: string | null }> = await periodsRes.json();
+
+        const matching = allPeriods.filter(
+          (p) => p.starts_on <= lastDay && p.ends_on >= firstDay
+        );
+        if (matching.length === 0) { setAvailabilityMap({}); return; }
+
+        const map: Record<string, Record<string, boolean>> = {};
+        await Promise.all(
+          matching.map(async (p) => {
+            const detailRes = await fetch(`/api/availability/periods/${p.id}`);
+            if (!detailRes.ok) return;
+            const detail: { members: Array<{ member_id: string; dates: Array<{ date: string; available: boolean }> }> } = await detailRes.json();
+            for (const m of detail.members) {
+              for (const d of m.dates) {
+                if (!map[d.date]) map[d.date] = {};
+                map[d.date][m.member_id] = d.available;
+              }
+            }
+          })
+        );
+        setAvailabilityMap(map);
+      } catch {
+        // non-critical — availability hints simply won't show
+      }
+    }
+
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { loadRoster(); loadMembers(); }, [activeMonth]);
+  useEffect(() => { loadRoster(); loadMembers(); loadAvailability(); }, [activeMonth]);
 
   /* ----------------------------- */
   /* Derived State                 */
@@ -241,34 +355,54 @@ export default function AdminRosterPage() {
   /* Save Draft                    */
   /* ----------------------------- */
 
+  // Guard month navigation when there are unsaved changes
+  function navigateMonth(fn: () => void) {
+    if (isDirty) {
+      setPendingAction(() => fn);
+      return;
+    }
+    setIsDirty(false);
+    fn();
+  }
+
   async function handleSaveDraft() {
     if (saving) return;
 
     setSaving(true);
+    try {
+      const flatAssignments = roster.flatMap((sunday) =>
+        sunday.assignments
+          .filter((a) => a.role != null)
+          .map((a) => ({
+            member_id: a.member_id,
+            date: a.date,
+            role_id: a.role.id ?? ROLE_ID_MAP[a.role.name as MemberRole],
+          }))
+      );
 
-    const flatAssignments = roster.flatMap((sunday) =>
-      sunday.assignments.map((a) => ({
-        member_id: a.member_id,
-        date: a.date,
-        role_id: a.role.id ?? ROLE_ID_MAP[a.role.name as MemberRole],
-      }))
-    );
+      const res = await fetch("/api/roster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignments: flatAssignments }),
+      });
 
-    const res = await fetch("/api/roster", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assignments: flatAssignments }),
-    });
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
 
-    setSaving(false);
+      if (!res.ok) {
+        showToast(json?.error ?? "Failed to save draft", "error");
+        return;
+      }
 
-    if (!res.ok) {
-      alert("Failed to save draft");
-      return;
+      await loadRoster();
+      setIsDirty(false);
+      showToast("Draft saved");
+    } catch (err) {
+      console.error("handleSaveDraft error:", err);
+      showToast("An unexpected error occurred while saving", "error");
+    } finally {
+      setSaving(false);
     }
-
-    await loadRoster();
-    alert("Draft saved");
   }
 
   /* ----------------------------- */
@@ -283,25 +417,34 @@ export default function AdminRosterPage() {
     );
     if (!confirmed) return;
 
-    // Save draft first
     setFinalising(true);
-    await handleSaveDraft();
+    try {
+      // Save draft first, then lock
+      await handleSaveDraft();
 
-    // Proceed to finalise
-    const res = await fetch("/api/roster", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: activeMonth }),
-    });
+      const res = await fetch("/api/roster", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: activeMonth }),
+      });
 
-    setFinalising(false);
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
 
-    if (!res.ok) {
-      alert("Failed to finalise");
-      return;
+      if (!res.ok) {
+        showToast(json?.error ?? "Failed to finalise", "error");
+        return;
+      }
+
+      await loadRoster();
+      setIsDirty(false);
+      showToast("Roster finalised and locked");
+    } catch (err) {
+      console.error("handleFinalise error:", err);
+      showToast("An unexpected error occurred while finalising", "error");
+    } finally {
+      setFinalising(false);
     }
-
-    await loadRoster();
   }
 
   /* ----------------------------- */
@@ -317,33 +460,40 @@ export default function AdminRosterPage() {
     if (!confirmed) return;
 
     setReverting(true);
+    try {
 
-    // TODO: implement PATCH /api/roster with { month, action: "revert" } on the server
     const res = await fetch("/api/roster", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ month: activeMonth, action: "revert" }),
-    });
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ month: activeMonth, action: "revert" }),
+      });
 
-    setReverting(false);
-
-    if (!res.ok) {
-      // Fallback: update local state so the UI reflects the revert in dev/mock mode
-      setRoster((prev) =>
-        prev.map((s) => ({
-          ...s,
-          status: "DRAFT" as RosterStatus,
-          assignments: s.assignments.map((a) => ({
-            ...a,
+      if (!res.ok) {
+        // Fallback: update local state so the UI reflects the revert in dev/mock mode
+        setRoster((prev) =>
+          prev.map((s) => ({
+            ...s,
             status: "DRAFT" as RosterStatus,
-            locked_at: null,
-          })),
-        }))
-      );
-      return;
-    }
+            assignments: s.assignments.map((a) => ({
+              ...a,
+              status: "DRAFT" as RosterStatus,
+              locked_at: null,
+            })),
+          }))
+        );
+        showToast("Reverted to draft (offline)");
+        return;
+      }
 
-    await loadRoster();
+      await loadRoster();
+      setIsDirty(false);
+      showToast("Roster reverted to draft");
+    } catch (err) {
+      console.error("handleRevertToDraft error:", err);
+      showToast("An unexpected error occurred while reverting", "error");
+    } finally {
+      setReverting(false);
+    }
   }
 
   /* ----------------------------- */
@@ -364,7 +514,7 @@ export default function AdminRosterPage() {
         {/* Left: month nav */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, -1)); }}
+            onClick={() => navigateMonth(() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, -1)); })}
             disabled={monthToNumber(activeMonth) <= monthToNumber(minMonth)}
             className={`p-1.5 rounded-md transition-colors ${monthToNumber(activeMonth) <= monthToNumber(minMonth) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
             aria-label="Previous month"
@@ -380,7 +530,7 @@ export default function AdminRosterPage() {
           </span>
 
           <button
-            onClick={() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, 1)); }}
+            onClick={() => navigateMonth(() => { setMonthNotes(""); setActiveMonth((m) => addMonths(m, 1)); })}
             disabled={monthToNumber(activeMonth) >= monthToNumber(maxMonth)}
             className={`p-1.5 rounded-md transition-colors ${monthToNumber(activeMonth) >= monthToNumber(maxMonth) ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'}`}
             aria-label="Next month"
@@ -391,7 +541,7 @@ export default function AdminRosterPage() {
           {/* hide jump when already on current month */}
           {activeMonth !== currentMonth && (
             <button
-              onClick={() => { setMonthNotes(""); setActiveMonth(currentMonth); }}
+              onClick={() => navigateMonth(() => { setMonthNotes(""); setActiveMonth(currentMonth); })}
               className="ml-3 px-2 py-1 text-sm rounded border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
             >
               Jump to Current
@@ -424,16 +574,60 @@ export default function AdminRosterPage() {
         )}
       </div>
 
+      {/* Unsaved-changes navigation guard modal */}
+      {pendingAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h2 className="text-base font-semibold text-gray-900 mb-2">Unsaved changes</h2>
+            <p className="text-sm text-gray-600 mb-6">
+              You have unsaved roster changes. If you leave now your changes will be lost.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setPendingAction(null)}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50"
+              >
+                Stay &amp; keep editing
+              </button>
+              <button
+                onClick={() => {
+                  const action = pendingAction;
+                  setPendingAction(null);
+                  setIsDirty(false);
+                  action();
+                }}
+                className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800"
+              >
+                Leave without saving
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast notification */}
+      {saveToast && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all ${
+            saveToast.type === "error"
+              ? "bg-red-600 text-white"
+              : "bg-gray-900 text-white"
+          }`}
+        >
+          {saveToast.message}
+        </div>
+      )}
+
       {/* Note modal handled via icon — keep table area uncluttered */}
 
       {/* Table */}
       {loading ? (
         <div className="py-16 text-center text-sm text-gray-400">Loading roster…</div>
       ) : (
-        <div className="bg-white rounded-xl border overflow-x-auto">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50 border-b">
+              <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
                 {ROSTER_COLUMN_ORDER.map((role) => (
                   <th key={role} className="px-2 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
@@ -444,7 +638,7 @@ export default function AdminRosterPage() {
             </thead>
             <tbody>
               {roster.map((sunday) => (
-                <tr key={sunday.date} className="border-b hover:bg-gray-50 transition-colors">
+                <tr key={sunday.date} className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
                     <td className="px-3 py-3 font-medium text-gray-900">
                     {new Date(sunday.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </td>
@@ -458,17 +652,76 @@ export default function AdminRosterPage() {
                     // Only show members who have this role (instrument)
                     const candidates = membersList.filter((m) => m.roles?.includes(role as MemberRole));
 
+                    // Split candidates by availability for this Sunday
+                    const dateAvail = availabilityMap[sunday.date] ?? {};
+                    const available   = candidates.filter((m) => dateAvail[m.id] === true);
+                    const noResponse  = candidates.filter((m) => dateAvail[m.id] === undefined);
+                    const unavailable = candidates.filter((m) => dateAvail[m.id] === false);
+
+                    // Option D: warn if the currently assigned member is unavailable
+                    const assignedId = assignment?.member_id ?? null;
+                    const assignedIsUnavailable = assignedId != null && dateAvail[assignedId] === false;
+
+                    // Double-booking: this member is already assigned to another role this Sunday.
+                    // "setup" and "sound" are exempt — one person can cover both if needed.
+                    const MULTI_OK_ROLES: string[] = ["setup", "sound"];
+                    const isCurrentRoleExempt = MULTI_OK_ROLES.includes(role);
+                    const assignedToOtherRoles = new Set(
+                      sunday.assignments
+                        .filter(
+                          (a) =>
+                            a.role.name !== role &&
+                            a.member_id != null &&
+                            !MULTI_OK_ROLES.includes(a.role.name)
+                        )
+                        .map((a) => a.member_id!)
+                    );
+                    const assignedIsDoubleBooked =
+                      !isCurrentRoleExempt &&
+                      assignedId != null &&
+                      assignedToOtherRoles.has(assignedId);
+                    const otherRoleLabels = assignedIsDoubleBooked
+                      ? sunday.assignments
+                          .filter((a) => a.role.name !== role && a.member_id === assignedId)
+                          .map((a) => ROLE_LABEL_MAP[a.role.name] ?? a.role.name)
+                      : [];
+
                     return (
                       <td key={role} className="px-2 py-2">
                         { !canEditRoster || (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                          <span className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${assignedIsDoubleBooked ? "bg-red-50 text-gray-700" : "bg-gray-100 text-gray-700"}`}>
                             {assignment?.member?.name ?? "—"}
+                            {assignedIsDoubleBooked && (
+                              <span title={`Also assigned to: ${otherRoleLabels.join(", ")}`} className="text-red-500">⚠</span>
+                            )}
+                            {assignedIsUnavailable && (
+                              <span title="Marked unavailable for this date" className="text-amber-500">⚠</span>
+                            )}
                           </span>
                         ) : (
+                          <div>
+                            {assignedIsDoubleBooked && (
+                              <p className="text-red-600 text-xs mb-0.5 flex items-center gap-0.5">
+                                <span>⚠</span> Also booked: {otherRoleLabels.join(", ")}
+                              </p>
+                            )}
+                            {assignedIsUnavailable && (
+                              <p className="text-amber-600 text-xs mb-0.5 flex items-center gap-0.5">
+                                <span>⚠</span> Unavailable
+                              </p>
+                            )}
                           <select
                             aria-label={`Assign ${ROLE_LABEL_MAP[role]}`}
                             value={assignment?.member_id ?? ""}
+                            className={`w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-2 text-gray-800 bg-white ${
+                              assignedIsDoubleBooked
+                                ? "border-red-400 focus:ring-red-200"
+                                : assignedIsUnavailable
+                                ? "border-amber-400 focus:ring-amber-200"
+                                : "border-gray-300 focus:ring-green-200"
+                            }`}
                             onChange={(e) => {
+                              setIsDirty(true);
                               const memberId = e.target.value || null;
                               const memberFull = candidates.find((m) => m.id === memberId) || undefined;
                               const member = memberFull ? { id: memberFull.id, name: memberFull.name } : undefined;
@@ -513,13 +766,37 @@ export default function AdminRosterPage() {
                                 })
                               );
                             }}
-                            className="w-full text-sm border border-gray-300 text-gray-800 bg-white rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-200"
                           >
                             <option value="">— Unassigned —</option>
-                            {candidates.map((m) => (
-                              <option key={m.id} value={m.id}>{m.name}</option>
-                            ))}
+                            {available.length > 0 && (
+                              <optgroup label="✓ Available">
+                                {available.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}{assignedToOtherRoles.has(m.id) ? " (also booked)" : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {noResponse.length > 0 && (
+                              <optgroup label="— No response">
+                                {noResponse.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}{assignedToOtherRoles.has(m.id) ? " (also booked)" : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {unavailable.length > 0 && (
+                              <optgroup label="✗ Unavailable">
+                                {unavailable.map((m) => (
+                                  <option key={m.id} value={m.id}>
+                                    {m.name}{assignedToOtherRoles.has(m.id) ? " (also booked)" : ""}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
+                          </div>
                         )}
                       </td>
                     );
