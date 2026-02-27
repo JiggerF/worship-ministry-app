@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, Suspense } from "react";
+import { useCurrentMember } from "./useCurrentMember";
 
 export const dynamic = "force-dynamic";
 import { ROLES } from "@/lib/constants/roles";
@@ -44,7 +45,20 @@ function toISODate(date: Date): string {
 }
 
 export default function AvailabilityPage() {
+  const { member: currentUser, loading: memberLoading } = useCurrentMember();
+  // Hide page for Worship Lead and Music Coordinator
+  if (!memberLoading && currentUser && ["WorshipLeader", "MusicCoordinator"].includes(currentUser.app_role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-xl border border-gray-200 p-6 text-center">
+          <div className="text-3xl mb-3">⚠️</div>
+          <p className="text-sm text-gray-700">Availability tracking is managed by your Coordinator.</p>
+        </div>
+      </div>
+    );
+  }
   const token = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
+  const periodId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("period") : null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +75,9 @@ export default function AvailabilityPage() {
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [isLockedOut, setIsLockedOut] = useState(false);
+  const [periodLabel, setPeriodLabel] = useState<string | null>(null);
+  // Sundays driven by API when in period mode; computed from targetMonth otherwise
+  const [apiSundays, setApiSundays] = useState<string[] | null>(null);
 
   // MVP: targetMonth = T+1 (next month, Melbourne time)
   const targetMonth = useMemo(() => {
@@ -112,8 +129,12 @@ export default function AvailabilityPage() {
         setLoading(true);
         setError(null);
 
+        const queryParam = periodId
+          ? `periodId=${periodId}`
+          : `targetMonth=${targetMonth}`;
+
         const res = await fetch(
-          `/api/availability/${token}?targetMonth=${targetMonth}`
+          `/api/availability/${token}?${queryParam}`
         );
         const json = await res.json().catch(() => ({}));
 
@@ -123,6 +144,8 @@ export default function AvailabilityPage() {
 
         setMember(json.member);
         setIsLockedOut(json.lockout?.locked ?? false);
+        if (json.periodLabel) setPeriodLabel(json.periodLabel);
+        if (json.sundays) setApiSundays(json.sundays);
 
         // Member-scoped roles from API
         setMemberRoles(json.roles ?? []);
@@ -131,17 +154,22 @@ export default function AvailabilityPage() {
           (a: AvailabilityRow, b: AvailabilityRow) => a.date.localeCompare(b.date)
         );
 
+        // Effective sundays: API-provided (period mode) or locally computed (T+1 mode)
+        const effectiveSundays: string[] = json.sundays ?? sundays;
+
         // Hydrate selected dates
         const availableDates = rows
           .filter((r) => r.status === "AVAILABLE")
           .map((r) => r.date)
-          .filter((d) => sundays.includes(d));
+          .filter((d) => effectiveSundays.includes(d));
 
         setSelectedDates(new Set(availableDates));
 
-        // Hydrate preferred role
+        // Hydrate preferred role: period mode uses top-level json.preferredRoleId
         const pref =
-          rows.find((r) => r.preferred_role != null)?.preferred_role ?? null;
+          json.preferredRoleId ??
+          rows.find((r) => r.preferred_role != null)?.preferred_role ??
+          null;
 
         if (pref != null) setPreferredRoleId(pref);
 
@@ -158,7 +186,7 @@ export default function AvailabilityPage() {
     }
 
     load();
-  }, [token, targetMonth, sundays]);
+  }, [token, targetMonth, sundays, periodId]);
 
   function toggleDate(dateIso: string) {
     setSelectedDates((prev) => {
@@ -184,8 +212,12 @@ export default function AvailabilityPage() {
       return;
     }
 
+    const queryParam = periodId
+      ? `periodId=${periodId}`
+      : `targetMonth=${targetMonth}`;
+
     const res = await fetch(
-      `/api/availability/${token}?targetMonth=${targetMonth}`,
+      `/api/availability/${token}?${queryParam}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -276,7 +308,7 @@ export default function AvailabilityPage() {
           <h1 className="text-xl font-bold text-gray-900">
             WCC Worship Team Availability
           </h1>
-          <p className="text-sm text-gray-500 mt-1">{targetMonthLabel}</p>
+          <p className="text-sm text-gray-500 mt-1">{periodLabel ?? targetMonthLabel}</p>
         </div>
 
         {/* Form */}
@@ -323,7 +355,7 @@ export default function AvailabilityPage() {
             </p>
 
             <div className="space-y-2">
-              {sundays.map((dateStr) => (
+              {(apiSundays ?? sundays).map((dateStr) => (
                 <label
                   key={dateStr}
                   className="flex items-center gap-3 cursor-pointer"

@@ -145,6 +145,82 @@ STOP — do not remove X immediately.
 - `saveError` / `setSaveError`
 - `toggleRole`
 
+### 7. Async event handlers must use try/catch/finally — ALWAYS
+
+**This rule exists because of a real incident:** clicking "Save Draft" on the Roster page caused a full dark-screen freeze. The root causes were:
+- A `TypeError` thrown inside the handler (`a.role` was `null` on a DB-hydrated row) crashed React's error boundary in dev mode → dark overlay
+- `setSaving(false)` was called *before* `await loadRoster()`, meaning any error during reload left the button stuck in "Saving..." state
+- `alert()` usage visually suspended the page, which on some OS/browser combos looks like a freeze
+
+**Mandatory pattern for every async button handler:**
+
+```typescript
+// CORRECT
+async function handleSomething() {
+  if (busy) return;
+  setBusy(true);
+  try {
+    const res = await fetch("/api/...", { ... });
+    let json: { error?: string } | null = null;
+    try { json = await res.json(); } catch { /* ignore */ }
+    if (!res.ok) {
+      showToast(json?.error ?? "Something failed", "error");
+      return;
+    }
+    await reloadData();
+    showToast("Success");
+  } catch (err) {
+    console.error("handleSomething error:", err);
+    showToast("An unexpected error occurred", "error");
+  } finally {
+    setBusy(false); // ALWAYS in finally — never before the await
+  }
+}
+
+// WRONG — no try/catch, setBusy before await, uses alert()
+async function handleSomething() {
+  setBusy(true);
+  const res = await fetch("/api/...", { ... }); // throws → screen freeze
+  setBusy(false);                                  // skipped on throw
+  if (!res.ok) { alert("Failed"); return; }        // alert() looks like freeze
+  await reloadData();                              // throws → busy stuck forever
+}
+```
+
+**Checklist before writing any new async handler:**
+1. `setBusy(true)` at the top
+2. Everything after it inside `try { ... }`
+3. Error reported via inline `showToast(...)`, NOT `alert()`
+4. `setBusy(false)` inside `finally { ... }` at the bottom
+5. Null-guard any nested property access before use (e.g. `a.role?.id`, `.filter((a) => a.role != null)`)
+
+**Never use `alert()` or `confirm()` for error feedback.** Use inline toast state:
+
+```typescript
+// CORRECT — add to component state
+const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+function showToast(message: string, type: "success" | "error" = "success") {
+  setToast({ message, type });
+  setTimeout(() => setToast(null), 3000);
+}
+
+// CORRECT — render at bottom of JSX
+{toast && (
+  <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+    toast.type === "error" ? "bg-red-600 text-white" : "bg-gray-900 text-white"
+  }`}>
+    {toast.message}
+  </div>
+)}
+
+// WRONG
+alert("Draft saved"); // visually suspends page; looks like freeze
+```
+
+> `window.confirm()` for destructive-action confirmation dialogs is acceptable. It is `alert()` for success/error *outcomes* that is banned.
+
+---
+
 ### 6. Every modal form needs a component test
 Any page that opens a modal with a form must have a test in `__tests__/components/` that:
 1. Mocks `fetch` for `/api/me` (Admin) and `/api/members`
@@ -183,6 +259,10 @@ it("renders all required form fields when Add Member is clicked", async () => {
 | Adding a modal form without a component test | Add `__tests__/components/<page>.test.tsx` asserting all form fields render |
 | Not running tests after a lint fix on a modal page | Always run `npm run test:components` — a blank form causes immediate test failures |
 | Button with only `border border-gray-300` (no text/bg color) | Always add `text-gray-700 bg-white hover:bg-gray-50` — omitting these makes buttons invisible/faint |
+| Async handler with no `try/catch` | Wrap everything after `setBusy(true)` in `try/catch/finally` — an uncaught throw triggers the full-screen dev error overlay (dark screen) |
+| `setBusy(false)` placed before `await reload()` | Put `setBusy(false)` in `finally` — any throw after the early reset leaves the button stuck |
+| Using `alert()` for success/error feedback | Use inline toast state (`showToast`) — `alert()` visually suspends the page and looks like a freeze |
+| Accessing `obj.nestedProp.deepProp` on data from the server | Always null-guard: `obj.nestedProp?.deepProp` or `.filter((x) => x.nestedProp != null)` before mapping |
 
 ---
 

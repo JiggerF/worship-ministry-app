@@ -325,6 +325,16 @@ export default function AdminPeoplePage() {
                       Coordinator
                     </span>
                   )}
+                  {member.app_role === "WorshipLeader" && (
+                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-purple-50 text-purple-700">
+                      Worship Leader
+                    </span>
+                  )}
+                  {member.app_role === "MusicCoordinator" && (
+                    <span className="ml-2 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-teal-50 text-teal-700">
+                      Music Coordinator
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{member.email}</td>
                 <td className="px-4 py-3">

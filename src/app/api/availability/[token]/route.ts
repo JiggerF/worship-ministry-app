@@ -58,6 +58,21 @@ function parseTargetMonth(targetMonth: string) {
   return { year, month };
 }
 
+function getSundaysBetween(startIso: string, endIso: string): string[] {
+  const sundays: string[] = [];
+  const end = new Date(endIso + "T00:00:00Z");
+  const d = new Date(startIso + "T00:00:00Z");
+  // advance to first Sunday on or after start
+  while (d.getUTCDay() !== 0) d.setUTCDate(d.getUTCDate() + 1);
+  while (d <= end) {
+    sundays.push(
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`
+    );
+    d.setUTCDate(d.getUTCDate() + 7);
+  }
+  return sundays;
+}
+
 function getSundaysUTC(year: number, month1to12: number) {
   const sundays: string[] = [];
   const first = new Date(Date.UTC(year, month1to12 - 1, 1));
@@ -137,18 +152,87 @@ export async function GET(req: NextRequest, context: RouteContext) {
   if (!token) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
   }
-  const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
-  if (!targetMonth) {
-    return NextResponse.json(
-      { error: "Missing targetMonth (YYYY-MM-01)" },
-      { status: 400 }
-    );
-  }
+  const periodId = req.nextUrl.searchParams.get("periodId");
+  const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   const member = await getMemberByMagicToken(token);
   if (!member) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
+  }
+
+  let roles: { id: number; name: string }[] = [];
+  try {
+    roles = await getMemberRoles(member.id);
+  } catch {
+    return NextResponse.json({ error: "Failed to load member roles" }, { status: 500 });
+  }
+
+  /* ── Period-based mode ── */
+  if (periodId) {
+    const { data: period, error: periodError } = await supabase
+      .from("availability_periods")
+      .select("*")
+      .eq("id", periodId)
+      .single();
+
+    if (periodError || !period) {
+      return NextResponse.json({ error: "Period not found" }, { status: 404 });
+    }
+
+    const now = new Date();
+    const mel = getMelbourneParts(now);
+    const todayIso = isoDate(mel.year, mel.month, mel.day);
+    const locked =
+      period.closed_at != null ||
+      (period.deadline != null && todayIso > period.deadline);
+    const lockout = { locked, lockoutIso: period.deadline ?? period.ends_on };
+
+    const sundays = getSundaysBetween(period.starts_on, period.ends_on);
+
+    // Fetch any existing response
+    const { data: responseRow } = await supabase
+      .from("availability_responses")
+      .select("*")
+      .eq("period_id", periodId)
+      .eq("member_id", member.id)
+      .single();
+
+    let availability: { date: string; status: string; preferred_role: number | null; notes: string | null }[] = [];
+    let preferredRoleId: number | null = null;
+
+    if (responseRow) {
+      preferredRoleId = responseRow.preferred_role_id ?? null;
+      const { data: dateRows } = await supabase
+        .from("availability_dates")
+        .select("date, available")
+        .eq("response_id", responseRow.id);
+
+      availability = (dateRows ?? []).map((d: { date: string; available: boolean }) => ({
+        date: d.date,
+        status: d.available ? "AVAILABLE" : "UNAVAILABLE",
+        preferred_role: preferredRoleId,
+        notes: responseRow.notes,
+      }));
+    }
+
+    return NextResponse.json({
+      member,
+      periodLabel: period.label,
+      sundays,
+      availability,
+      preferredRoleId,
+      roles,
+      lockout,
+    });
+  }
+
+  /* ── Legacy T+1 mode ── */
+  if (!targetMonth) {
+    return NextResponse.json(
+      { error: "Missing targetMonth (YYYY-MM-01) or periodId" },
+      { status: 400 }
+    );
   }
 
   const parsed = parseTargetMonth(targetMonth);
@@ -188,16 +272,6 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
   const lockout = isLocked(parsed.year, parsed.month);
 
-  let roles: { id: number; name: string }[] = [];
-  try {
-    roles = await getMemberRoles(member.id);
-  } catch {
-    return NextResponse.json(
-      { error: "Failed to load member roles" },
-      { status: 500 }
-    );
-  }
-
   return NextResponse.json({
     member,
     targetMonth,
@@ -217,18 +291,107 @@ export async function POST(req: NextRequest, context: RouteContext) {
   if (!token) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
   }
-  const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
-  if (!targetMonth) {
-    return NextResponse.json(
-      { error: "Missing targetMonth (YYYY-MM-01)" },
-      { status: 400 }
-    );
-  }
+  const periodId = req.nextUrl.searchParams.get("periodId");
+  const targetMonth = req.nextUrl.searchParams.get("targetMonth");
 
   const member = await getMemberByMagicToken(token);
   if (!member) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  /* ── Period-based mode ── */
+  if (periodId) {
+    const { data: period, error: periodError } = await supabase
+      .from("availability_periods")
+      .select("*")
+      .eq("id", periodId)
+      .single();
+
+    if (periodError || !period) {
+      return NextResponse.json({ error: "Period not found" }, { status: 404 });
+    }
+
+    const now = new Date();
+    const mel = getMelbourneParts(now);
+    const todayIso = isoDate(mel.year, mel.month, mel.day);
+    const locked =
+      period.closed_at != null ||
+      (period.deadline != null && todayIso > period.deadline);
+
+    if (locked) {
+      return NextResponse.json(
+        { error: "This availability period is closed" },
+        { status: 423 }
+      );
+    }
+
+    const sundays = getSundaysBetween(period.starts_on, period.ends_on);
+    const availableDates = new Set<string>(body.available_dates ?? []);
+    const preferred_role_id = body.preferred_role_id ?? null;
+    const notes = body.notes ?? null;
+
+    for (const d of availableDates) {
+      if (!sundays.includes(d)) {
+        return NextResponse.json({ error: `Invalid date: ${d}` }, { status: 400 });
+      }
+    }
+
+    // Upsert response header
+    const { data: responseData, error: responseError } = await supabase
+      .from("availability_responses")
+      .upsert(
+        {
+          period_id: periodId,
+          member_id: member.id,
+          notes,
+          preferred_role_id,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "period_id,member_id" }
+      )
+      .select()
+      .single();
+
+    if (responseError) {
+      return NextResponse.json({ error: responseError.message }, { status: 500 });
+    }
+
+    // Replace date rows cleanly
+    await supabase
+      .from("availability_dates")
+      .delete()
+      .eq("response_id", responseData.id);
+
+    const dateRows = sundays.map((date) => ({
+      response_id: responseData.id,
+      date,
+      available: availableDates.has(date),
+    }));
+
+    if (dateRows.length > 0) {
+      const { error: insertError } = await supabase
+        .from("availability_dates")
+        .insert(dateRows);
+      if (insertError) {
+        return NextResponse.json({ error: insertError.message }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  }
+
+  /* ── Legacy T+1 mode ── */
+  if (!targetMonth) {
+    return NextResponse.json(
+      { error: "Missing targetMonth (YYYY-MM-01) or periodId" },
+      { status: 400 }
+    );
   }
 
   const parsed = parseTargetMonth(targetMonth);
@@ -259,14 +422,6 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json(
       { error: "Availability is locked", lockout },
       { status: 423 }
-    );
-  }
-
-  const body = await req.json().catch(() => null);
-  if (!body) {
-    return NextResponse.json(
-      { error: "Invalid JSON body" },
-      { status: 400 }
     );
   }
 

@@ -186,3 +186,35 @@ export interface AuditLogRow {
   entity_id: string | null;
   summary: string;
 }
+
+// ─────────────────────────────────────────────
+// AVAILABILITY PERIODS (coordinator-managed rounds)
+// ─────────────────────────────────────────────
+
+export interface AvailabilityPeriod {
+  id: string;
+  created_at: string;
+  created_by: string | null;
+  label: string;         // e.g. "April–May 2026"
+  starts_on: string;     // YYYY-MM-DD
+  ends_on: string;       // YYYY-MM-DD
+  deadline: string | null; // YYYY-MM-DD
+  closed_at: string | null;
+}
+
+export interface AvailabilityResponse {
+  id: string;
+  submitted_at: string;
+  updated_at: string;
+  period_id: string;
+  member_id: string;
+  notes: string | null;
+  preferred_role_id: number | null;
+}
+
+export interface AvailabilityDateEntry {
+  id: string;
+  response_id: string;
+  date: string;      // YYYY-MM-DD
+  available: boolean;
+}

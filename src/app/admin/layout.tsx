@@ -36,6 +36,7 @@ function useCurrentMember() {
 
 const SIDEBAR_ITEMS = [
   { href: "/admin/roster", label: "Roster Manager", icon: "📋" },
+  { href: "/admin/availability", label: "Availability", icon: "📅" },
   { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
   { href: "/admin/songs", label: "Song Manager", icon: "🎵" },
   { href: "/admin/people", label: "People", icon: "👥" },
