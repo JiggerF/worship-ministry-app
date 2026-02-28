@@ -20,8 +20,8 @@ export default function PortalLayout({
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-6 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">WCC Worship Team</h1>
-        <p className="text-sm text-gray-500 mt-1">Service Roster Schedule</p>
+        <h1 className="text-2xl font-bold text-gray-900">WORDCC Worship Team</h1>
+        <p className="text-sm text-gray-500 mt-1">Musicians Portal</p>
       </header>
 
       {/* Tab Navigation */}
