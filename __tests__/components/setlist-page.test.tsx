@@ -383,11 +383,11 @@ describe("AdminSetlistPage — published setlist", () => {
     expect(screen.getByText("DRAFT")).toBeInTheDocument();
   });
 
-  it("Clear all is disabled when setlist is published", async () => {
+  it("Clear all is hidden when setlist is published", async () => {
     vi.stubGlobal("fetch", makeFetch({ me: ADMIN_ME, setlist: THREE_ROWS_PUBLISHED }));
     render(<AdminSetlistPage />);
     await screen.findByRole("button", { name: /revert to draft/i });
-    expect(screen.getByRole("button", { name: /clear all/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /clear all/i })).not.toBeInTheDocument();
   });
 
   it("Clear all is enabled when setlist is a draft", async () => {

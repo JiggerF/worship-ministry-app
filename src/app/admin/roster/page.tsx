@@ -662,6 +662,14 @@ export default function AdminRosterPage() {
                     const assignedId = assignment?.member_id ?? null;
                     const assignedIsUnavailable = assignedId != null && dateAvail[assignedId] === false;
 
+                    // Warn if assigned member hasn't submitted availability for this date
+                    // (only when an availability period actually covers this date)
+                    const dateHasAvailabilityData = Object.keys(dateAvail).length > 0;
+                    const assignedHasNoResponse =
+                      assignedId != null &&
+                      dateHasAvailabilityData &&
+                      dateAvail[assignedId] === undefined;
+
                     // Double-booking: this member is already assigned to another role this Sunday.
                     // "setup" and "sound" are exempt — one person can cover both if needed.
                     const MULTI_OK_ROLES: string[] = ["setup", "sound"];
@@ -670,6 +678,7 @@ export default function AdminRosterPage() {
                       sunday.assignments
                         .filter(
                           (a) =>
+                            a.role?.name != null &&
                             a.role.name !== role &&
                             a.member_id != null &&
                             !MULTI_OK_ROLES.includes(a.role.name)
@@ -682,20 +691,23 @@ export default function AdminRosterPage() {
                       assignedToOtherRoles.has(assignedId);
                     const otherRoleLabels = assignedIsDoubleBooked
                       ? sunday.assignments
-                          .filter((a) => a.role.name !== role && a.member_id === assignedId)
+                          .filter((a) => a.role?.name != null && a.role.name !== role && a.member_id === assignedId)
                           .map((a) => ROLE_LABEL_MAP[a.role.name] ?? a.role.name)
                       : [];
 
                     return (
                       <td key={role} className="px-2 py-2">
                         { !canEditRoster || (lockedForMonth) || (assignment && assignment.status === 'LOCKED') ? (
-                          <span className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${assignedIsDoubleBooked ? "bg-red-50 text-gray-700" : "bg-gray-100 text-gray-700"}`}>
+                          <span className={`text-xs px-2 py-1 rounded inline-flex items-center gap-1 ${assignedIsDoubleBooked ? "bg-red-50 text-gray-700" : assignedHasNoResponse ? "bg-blue-50 text-gray-700" : "bg-gray-100 text-gray-700"}`}>
                             {assignment?.member?.name ?? "—"}
                             {assignedIsDoubleBooked && (
                               <span title={`Also assigned to: ${otherRoleLabels.join(", ")}`} className="text-red-500">⚠</span>
                             )}
                             {assignedIsUnavailable && (
                               <span title="Marked unavailable for this date" className="text-amber-500">⚠</span>
+                            )}
+                            {assignedHasNoResponse && !assignedIsUnavailable && (
+                              <span title="Hasn't responded to availability form" className="text-blue-500">?</span>
                             )}
                           </span>
                         ) : (
@@ -710,6 +722,11 @@ export default function AdminRosterPage() {
                                 <span>⚠</span> Unavailable
                               </p>
                             )}
+                            {assignedHasNoResponse && !assignedIsUnavailable && (
+                              <p className="text-blue-600 text-xs mb-0.5 flex items-center gap-0.5">
+                                <span>?</span> No availability response
+                              </p>
+                            )}
                           <select
                             aria-label={`Assign ${ROLE_LABEL_MAP[role]}`}
                             value={assignment?.member_id ?? ""}
@@ -718,6 +735,8 @@ export default function AdminRosterPage() {
                                 ? "border-red-400 focus:ring-red-200"
                                 : assignedIsUnavailable
                                 ? "border-amber-400 focus:ring-amber-200"
+                                : assignedHasNoResponse
+                                ? "border-blue-400 focus:ring-blue-200"
                                 : "border-gray-300 focus:ring-green-200"
                             }`}
                             onChange={(e) => {
@@ -730,11 +749,11 @@ export default function AdminRosterPage() {
                                 prev.map((s) => {
                                   if (s.date !== sunday.date) return s;
 
-                                  const existingIdx = s.assignments.findIndex((a) => a.role.name === role);
+                                  const existingIdx = s.assignments.findIndex((a) => a.role?.name === role);
 
                                   if (existingIdx >= 0) {
                                     const updated = s.assignments.map((a) => {
-                                      if (a.role.name !== role) return a;
+                                      if (a.role?.name !== role) return a;
 
                                       const newStatus: RosterStatus = a.status === 'LOCKED' ? 'LOCKED' : 'DRAFT';
 

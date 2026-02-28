@@ -12,37 +12,65 @@ export async function GET() {
   const { data, error } = await supabase
     .from('app_settings')
     .select('key, value')
-    .eq('key', 'roster_pagination')
-    .limit(1)
-    .single();
-
-  if (error && error.code !== 'PGRST116') {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  if (!data) {
-    return NextResponse.json({ future_months: 2, history_months: 6 });
-  }
-
-  const val = data.value ?? {};
-  return NextResponse.json({ future_months: val.future_months ?? 2, history_months: val.history_months ?? 6 });
-}
-
-export async function PATCH(req: NextRequest) {
-  const body = await req.json().catch(() => null);
-  if (!body || typeof body.future_months !== 'number' || typeof body.history_months !== 'number') {
-    return NextResponse.json({ error: 'Invalid payload. Expect { future_months: number, history_months: number }' }, { status: 400 });
-  }
-
-  const payload = { future_months: body.future_months, history_months: body.history_months };
-
-  const { error } = await supabase
-    .from('app_settings')
-    .upsert({ key: 'roster_pagination', value: payload }, { onConflict: 'key' });
+    .in('key', ['roster_pagination', 'setlist']);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, ...payload });
+  const rows = data ?? [];
+  const pagination = rows.find((r) => r.key === 'roster_pagination')?.value ?? {};
+  const setlist = rows.find((r) => r.key === 'setlist')?.value ?? {};
+
+  return NextResponse.json({
+    future_months: pagination.future_months ?? 2,
+    history_months: pagination.history_months ?? 6,
+    max_songs_per_setlist: setlist.max_songs ?? 3,
+  });
+}
+
+export async function PATCH(req: NextRequest) {
+  const body = await req.json().catch(() => null);
+  if (!body) {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+  }
+
+  let hasUpdate = false;
+
+  if (typeof body.future_months === 'number' || typeof body.history_months === 'number') {
+    // Fetch existing pagination values so we can merge rather than overwrite
+    const { data: existing } = await supabase
+      .from('app_settings')
+      .select('value')
+      .eq('key', 'roster_pagination')
+      .limit(1)
+      .single();
+    const prev = existing?.value ?? {};
+    const paginationPayload = {
+      future_months: typeof body.future_months === 'number' ? body.future_months : (prev.future_months ?? 2),
+      history_months: typeof body.history_months === 'number' ? body.history_months : (prev.history_months ?? 6),
+    };
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'roster_pagination', value: paginationPayload }, { onConflict: 'key' });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    hasUpdate = true;
+  }
+
+  if (typeof body.max_songs_per_setlist === 'number') {
+    if (body.max_songs_per_setlist < 1 || body.max_songs_per_setlist > 10) {
+      return NextResponse.json({ error: 'max_songs_per_setlist must be between 1 and 10' }, { status: 400 });
+    }
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'setlist', value: { max_songs: body.max_songs_per_setlist } }, { onConflict: 'key' });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    hasUpdate = true;
+  }
+
+  if (!hasUpdate) {
+    return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+  }
+
+  return NextResponse.json({ success: true });
 }

@@ -500,6 +500,15 @@ export default function AdminSetlistPage() {
   // ── PDF download ─────────────────────────────
   const [isDownloading, setIsDownloading] = useState(false);
 
+  // ── Max songs per setlist (from app settings) ─
+  const [maxSongsPerSetlist, setMaxSongsPerSetlist] = useState(3);
+  useEffect(() => {
+    fetch('/api/settings', { cache: 'no-store' })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.max_songs_per_setlist) setMaxSongsPerSetlist(data.max_songs_per_setlist); })
+      .catch(() => { /* keep default of 3 */ });
+  }, []);
+
   // ─────────────────────────────────────────────
   // Fetch setlist for selected date
   // ─────────────────────────────────────────────
@@ -603,7 +612,7 @@ export default function AdminSetlistPage() {
     () => new Set(setlistRows.map((r) => r.song_id)),
     [setlistRows]
   );
-  const freeSlots = 3 - setlistRows.length;
+  const freeSlots = Math.max(0, maxSongsPerSetlist - setlistRows.length);
 
   // ─────────────────────────────────────────────
   // Add songs (from modal)
@@ -615,8 +624,8 @@ export default function AdminSetlistPage() {
     try {
       // Assign to the next empty positions
       const usedPositions = new Set(setlistRows.map((r) => r.position));
-      const freePositions = [1, 2, 3].filter((p) => !usedPositions.has(p));
-      await Promise.all(
+      const freePositions = Array.from({ length: maxSongsPerSetlist }, (_, i) => i + 1).filter((p) => !usedPositions.has(p));
+      const responses = await Promise.all(
         songs.slice(0, freePositions.length).map((song, i) =>
           fetch("/api/setlist", {
             method: "POST",
@@ -630,6 +639,14 @@ export default function AdminSetlistPage() {
           })
         )
       );
+      // Check every response — fetch() resolves even on 4xx/5xx
+      for (const res of responses) {
+        if (!res.ok) {
+          let errMsg = `Server error ${res.status}`;
+          try { const j = await res.json(); errMsg = j?.error ?? errMsg; } catch { /* ignore */ }
+          throw new Error(errMsg);
+        }
+      }
       await fetchSetlist();
     } catch (e) {
       setMutationError(e instanceof Error ? e.message : "Failed to add songs");
@@ -897,7 +914,9 @@ export default function AdminSetlistPage() {
     currentMember?.app_role === "WorshipLeader" ||
     currentMember?.app_role === "MusicCoordinator";
 
-  const canEdit =
+  // canManageSetlist: role-based check only — used for Publish / Revert buttons
+  // which must remain accessible even when the setlist is published.
+  const canManageSetlist =
     !memberLoading &&
     currentMember !== null &&
     (currentMember.app_role === "Admin" ||
@@ -905,10 +924,14 @@ export default function AdminSetlistPage() {
       (isWorshipLeadRole &&
         currentMember.id === worshipLeadMemberId));
 
+  // canEdit: also requires the setlist to NOT be published — prevents accidental
+  // edits to a finalised/published setlist; user must Revert to Draft first.
+  const canEdit = canManageSetlist && !isPublished;
+
   const isViewOnlyWL =
     !memberLoading &&
     isWorshipLeadRole &&
-    !canEdit;
+    !canManageSetlist;
 
   // ─────────────────────────────────────────────
   // Render
@@ -1185,9 +1208,9 @@ export default function AdminSetlistPage() {
       )}
 
           {/* Bottom action buttons — matches roster page layout */}
-      {canEdit && (
+      {canManageSetlist && (
         <div className="flex justify-end gap-2 mt-4">
-          {sortedRows.length > 0 && (
+          {sortedRows.length > 0 && canEdit && (
             <button
               onClick={handleDeleteAll}
               disabled={saving || reordering || isPublished}

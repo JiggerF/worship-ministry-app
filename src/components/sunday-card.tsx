@@ -300,7 +300,7 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
                     <span className={`text-xs font-medium w-10 shrink-0 ${styles.assignmentRole}`}>
                       {ROLE_SHORT_LABEL_MAP[role]}
                     </span>
-                    <span className={`text-sm truncate ${assignment ? styles.assignmentName : "text-gray-300 italic"}`}>
+                    <span className={`text-sm truncate ${assignment?.member?.name ? styles.assignmentName : "text-gray-300 italic"}`}>
                       {assignment?.member?.name ?? "none"}
                     </span>
                   </div>
@@ -312,7 +312,7 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
                     <span className={`text-xs font-medium w-10 shrink-0 ${styles.assignmentRole}`}>
                       {ROLE_SHORT_LABEL_MAP[role]}
                     </span>
-                    <span className={`text-sm truncate ${assignment ? styles.assignmentName : "text-gray-300 italic"}`}>
+                    <span className={`text-sm truncate ${assignment?.member?.name ? styles.assignmentName : "text-gray-300 italic"}`}>
                       {assignment?.member?.name ?? "none"}
                     </span>
                   </div>
