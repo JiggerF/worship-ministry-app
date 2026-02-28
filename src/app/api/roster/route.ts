@@ -111,7 +111,21 @@ export async function GET(req: NextRequest) {
 
     const { start, end } = getMonthRange(parsed.year, parsed.month);
 
-    const { data, error } = await supabase
+    // Determine whether the caller may see DRAFT assignments.
+    // Admin and Coordinator can see DRAFT when managing the roster grid.
+    // When ?view=portal is set the caller explicitly wants the portal view
+    // (musician-facing) which must ALWAYS show LOCKED-only — even if the same
+    // browser also has an admin session (common: coordinator previewing the portal).
+    const viewParam = req.nextUrl.searchParams.get("view");
+    const isPortalView = viewParam === "portal";
+
+    const actor = await getActorFromRequest(req);
+    const canSeeDraft =
+      !isPortalView &&
+      actor !== null &&
+      (actor.role === "Admin" || actor.role === "Coordinator");
+
+    let query = supabase
       .from("roster")
       .select(
         `
@@ -130,6 +144,12 @@ export async function GET(req: NextRequest) {
       .lte("date", end)
       .order("date", { ascending: true })
       .order("role_id", { ascending: true });
+
+    if (!canSeeDraft) {
+      query = query.eq("status", "LOCKED");
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

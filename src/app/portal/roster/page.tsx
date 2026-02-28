@@ -204,7 +204,7 @@ export default function PortalRosterPage() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/roster?month=${activeMonth}`, {
+        const res = await fetch(`/api/roster?month=${activeMonth}&view=portal`, {
           cache: "no-store",
         });
         const json = await res.json().catch(() => ({}));
