@@ -71,6 +71,7 @@ const SECTIONS: Section[] = [
       { label: "Worship Lead", slug: "roles-worship-lead" },
       { label: "Worship Coordinator", slug: "roles-worship-coordinator" },
       { label: "Music Coordinator", slug: "roles-music-coordinator" },
+      { label: "Tech Coordinator", slug: "roles-tech-coordinator" },
     ],
   },
   { label: "Weekly Rhythm", slug: "weekly-rhythm" },
@@ -127,6 +128,7 @@ _Write your team's purpose here — 10 lines max._
   "roles-worship-lead": ROLE_TEMPLATE,
   "roles-worship-coordinator": ROLE_TEMPLATE,
   "roles-music-coordinator": ROLE_TEMPLATE,
+  "roles-tech-coordinator": ROLE_TEMPLATE,
 
   "weekly-rhythm": `## Setlist
 - Songs due: **[day, time]**

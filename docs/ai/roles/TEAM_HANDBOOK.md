@@ -15,15 +15,16 @@ reads the rendered output. Every save is a new version with a change log (who, w
 | Section | Slug | Type | Notes |
 |---------|------|------|-------|
 | Vision & Values | `vision-values` | Singleton | 10 lines max; why we exist |
-| Roles & Responsibilities | `roles-worship-lead` etc. | Per-role | 3 sub-pages (see template below) |
+| Roles & Responsibilities | `roles-worship-lead` etc. | Per-role | 4 sub-pages (see template below) |
 | Weekly Rhythm | `weekly-rhythm` | Singleton | Setlist deadlines, rehearsal times, roster cadence |
 | Decision Rights & Escalation | `decision-rights` | Singleton | How conflicts are resolved; Owner vs Support |
 
-**All 6 document slugs:**
+**All 7 document slugs:**
 - `vision-values`
 - `roles-worship-lead`
 - `roles-worship-coordinator`
 - `roles-music-coordinator`
+- `roles-tech-coordinator`
 - `weekly-rhythm`
 - `decision-rights`
 

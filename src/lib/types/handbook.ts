@@ -55,6 +55,7 @@ export const HANDBOOK_SECTIONS = [
       { label: "Worship Lead", slug: "roles-worship-lead" },
       { label: "Worship Coordinator", slug: "roles-worship-coordinator" },
       { label: "Music Coordinator", slug: "roles-music-coordinator" },
+      { label: "Tech Coordinator", slug: "roles-tech-coordinator" },
     ],
   },
   {
