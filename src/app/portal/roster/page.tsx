@@ -126,8 +126,14 @@ function getMonthSundays(monthValue: string) {
 
 /**
  * Sort comparator for SundayCardRoster arrays.
- * The upcoming Sunday (identified by `upcomingISO`) is always placed first.
- * All other Sundays are sorted ascending (oldest → newest).
+ *
+ * Order:
+ *  1. Upcoming Sunday (identified by `upcomingISO`) — always pinned first.
+ *  2. Future Sundays (date > upcomingISO) — ascending (nearest first).
+ *  3. Past Sundays (date < upcomingISO) — ascending at the bottom.
+ *
+ * This keeps the most actionable dates at the top and pushes historical
+ * services to the bottom where they can be greyed out in the UI.
  *
  * Exported for unit testing.
  */
@@ -136,9 +142,18 @@ export function sortRosterCards(
   upcomingISO: string
 ): { date: string }[] {
   return [...rosters].sort((a, b) => {
+    // 1. Upcoming Sunday always first
     if (a.date === upcomingISO) return -1;
     if (b.date === upcomingISO) return 1;
-    // ascending: oldest → newest
+
+    const aIsPast = a.date < upcomingISO;
+    const bIsPast = b.date < upcomingISO;
+
+    // 2. Future dates before past dates
+    if (!aIsPast && bIsPast) return -1;
+    if (aIsPast && !bIsPast) return 1;
+
+    // 3. Within the same group: ascending (earliest → latest)
     return a.date.localeCompare(b.date);
   });
 }
@@ -396,17 +411,18 @@ export default function PortalRosterPage() {
         ))}
       </div>
 
-      {/* Sunday Cards (Read-Only) */}
+      {/* Sunday Cards (Read-Only) — past Sundays are hidden; musicians only see upcoming + future */}
       <div className="space-y-4">
-        {sortedRoster.map((roster) => {
-          const isNext = roster.date === upcomingSundayISO;
-
-          return (
-            <div key={roster.date} ref={isNext ? nextCardRef : undefined}>
-              <SundayCard roster={roster} isNext={isNext} />
-            </div>
-          );
-        })}
+        {sortedRoster
+          .filter((roster) => roster.date >= upcomingSundayISO)
+          .map((roster) => {
+            const isNext = roster.date === upcomingSundayISO;
+            return (
+              <div key={roster.date} ref={isNext ? nextCardRef : undefined}>
+                <SundayCard roster={roster} isNext={isNext} />
+              </div>
+            );
+          })}
 
         {sortedRoster.length === 0 && (
           <div className="text-center py-12 text-gray-400">
