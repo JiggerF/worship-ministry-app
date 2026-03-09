@@ -286,21 +286,26 @@ export default function AvailabilityPeriodDetailPage({
           <h2 className="text-sm font-semibold text-gray-700 mb-3">
             Not yet responded ({notResponded.length})
           </h2>
-          <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+          <div className="bg-white border border-gray-200 rounded-xl p-3 flex flex-col gap-2">
             {notResponded.map((m) => (
-              <div key={m.member_id} className="flex items-center justify-between px-4 py-3 gap-3">
-                <span className="text-sm font-medium text-gray-900">{m.member_name}</span>
-                <button
-                  onClick={() => copyMagicLink(m.member_magic_token)}
-                  className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                    copiedToken === m.member_magic_token
-                      ? "border-green-300 text-green-700 bg-green-50"
-                      : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
-                  }`}
-                >
-                  {copiedToken === m.member_magic_token ? "Copied!" : "Copy magic link"}
-                </button>
-              </div>
+              <button
+                key={m.member_id}
+                onClick={() => copyMagicLink(m.member_magic_token)}
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium text-left transition-colors ${
+                  copiedToken === m.member_magic_token
+                    ? "border-green-300 text-green-700 bg-green-50"
+                    : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                }`}
+              >
+                <span className="shrink-0 text-base leading-none">
+                  {copiedToken === m.member_magic_token ? "✓" : "🔗"}
+                </span>
+                <span>
+                  {copiedToken === m.member_magic_token
+                    ? `Copied for ${m.member_name}!`
+                    : `Copy link · ${m.member_name}`}
+                </span>
+              </button>
             ))}
           </div>
           <p className="text-xs text-gray-400 mt-2 px-1">Copy a link and send it via Viber DM to the musician.</p>
