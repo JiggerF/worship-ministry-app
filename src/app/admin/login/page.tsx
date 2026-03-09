@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Spinner from "@/app/components/Spinner";
 import { useRouter } from "next/navigation";
 import styles from "../../styles.module.css";
 
@@ -99,8 +100,9 @@ export default function AdminLoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+            className="w-full py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center"
           >
+            {loading && <Spinner />}
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
