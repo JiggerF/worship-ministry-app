@@ -1,0 +1,44 @@
+
+1. To simulate a complete engineering plan. This is close to what senior engineering 
+teams do in design reviews. 
+Idea->Run Master PLanning Prompt -> Ge full architecture plan -> Execute implementation
+Having this prompt pipeline saves hundreds of hours.
+
+```
+Use feature-planning-pipeline.md
+
+Topic:
+Introduce multi-tenancy so multiple churches can use the worship ministry platform safely.
+```
+
+
+
+
+A prompt-driven engineering workflow.
+Essentially an AI-assisted product development process.
+
+
+
+1.) Use below prompt when designing multi-tenancy, AI agents,
+database schema change, new system modules, major feature architecture
+
+```
+Use the architecture-design-review prompt.
+
+Topic:
+Design a <migration plan to introduce multi-tenancy into the worship ministry platform>
+```
+
+
+2.) After #1, This simulates a design critique meeting, which is exactly what senior engineering teams do for #1.
+
+```
+Challenge this design.
+
+Use:
+- Systems Thinking
+- Staff Software Engineer
+- SDET / Quality Engineer
+
+Identify weaknesses, hidden complexity, or safer alternatives.
+```
