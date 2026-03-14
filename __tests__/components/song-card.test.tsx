@@ -27,6 +27,7 @@ const BASE_SONG: SongWithCharts = {
   title: "Amazing Grace",
   artist: "John Newton",
   status: "published",
+  tenant_id: "00000000-0000-0000-0000-000000000001",
   categories: ["adoration_worship"],
   youtube_url: null,
   scripture_anchor: "Ephesians 2:8",

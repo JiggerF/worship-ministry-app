@@ -25,10 +25,11 @@ export interface HandbookEditorConfig {
  * Returns the roles and individual member IDs permitted to edit handbook documents.
  * Admin is always included in editorRoles regardless of stored value.
  */
-export async function getHandbookEditorConfig(): Promise<HandbookEditorConfig> {
+export async function getHandbookEditorConfig(tenantId: string): Promise<HandbookEditorConfig> {
   const { data, error } = await supabase
     .from("app_settings")
     .select("value")
+    .eq("tenant_id", tenantId)
     .eq("key", "handbook_permissions")
     .single();
 
@@ -46,13 +47,14 @@ export async function getHandbookEditorConfig(): Promise<HandbookEditorConfig> {
   return { editorRoles, editorMemberIds };
 }
 
-/** Returns metadata for all current documents (no content). */
-export async function getHandbookMeta(): Promise<HandbookMeta[]> {
+/** Returns metadata for all current documents (no content), scoped to a tenant. */
+export async function getHandbookMeta(tenantId: string): Promise<HandbookMeta[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select(
       "id, slug, title, major_version, minor_version, created_by_name, created_at"
     )
+    .eq("tenant_id", tenantId)
     .eq("is_current", true)
     .order("created_at", { ascending: true });
 
@@ -60,13 +62,15 @@ export async function getHandbookMeta(): Promise<HandbookMeta[]> {
   return (data ?? []) as HandbookMeta[];
 }
 
-/** Returns the current document for a slug, including full content. */
+/** Returns the current document for a slug, scoped to a tenant. */
 export async function getCurrentDoc(
+  tenantId: string,
   slug: string
 ): Promise<HandbookDocument | null> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("slug", slug)
     .eq("is_current", true)
     .single();
@@ -78,11 +82,12 @@ export async function getCurrentDoc(
   return data as HandbookDocument;
 }
 
-/** Returns all versions for a slug, newest first. Used by MVP2 history panel. */
-export async function getDocHistory(slug: string): Promise<HandbookDocument[]> {
+/** Returns all versions for a slug, newest first. */
+export async function getDocHistory(tenantId: string, slug: string): Promise<HandbookDocument[]> {
   const { data, error } = await supabase
     .from(TABLE)
     .select("*")
+    .eq("tenant_id", tenantId)
     .eq("slug", slug)
     .order("major_version", { ascending: false })
     .order("minor_version", { ascending: false });
@@ -100,13 +105,14 @@ export async function getDocHistory(slug: string): Promise<HandbookDocument[]> {
  * transactions via the REST API, but the window of inconsistency is < 1ms.
  */
 export async function saveNewVersion(
+  tenantId: string,
   slug: string,
   payload: SaveHandbookPayload,
   authorId: string | null,
   authorName: string | null
 ): Promise<HandbookDocument> {
   // 1. Fetch current row to determine next version numbers
-  const current = await getCurrentDoc(slug);
+  const current = await getCurrentDoc(tenantId, slug);
 
   let nextMajor = 1;
   let nextMinor = 0;
@@ -133,6 +139,7 @@ export async function saveNewVersion(
   const { data, error } = await supabase
     .from(TABLE)
     .insert({
+      tenant_id: tenantId,
       slug,
       title: current?.title ?? slug,
       content: payload.content,
@@ -158,6 +165,7 @@ export async function saveNewVersion(
  * The change log is auto-generated noting it was a restore.
  */
 export async function restoreVersion(
+  tenantId: string,
   slug: string,
   versionId: string,
   authorId: string | null,
@@ -167,7 +175,8 @@ export async function restoreVersion(
     .from(TABLE)
     .select("*")
     .eq("id", versionId)
-    .eq("slug", slug) // safety: confirm it belongs to this slug
+    .eq("tenant_id", tenantId)
+    .eq("slug", slug) // safety: confirm it belongs to this slug within this tenant
     .single();
 
   if (fetchError || !old) {
@@ -177,6 +186,7 @@ export async function restoreVersion(
   const oldDoc = old as HandbookDocument;
 
   return saveNewVersion(
+    tenantId,
     slug,
     {
       content: oldDoc.content,

@@ -4,26 +4,29 @@
  * src/app/api/members/route.ts
  *
  * Tests authorisation, input validation, and response shaping.
- * Supabase is fully mocked — no real DB required.
+ * getActorFromRequest and DB helpers are mocked.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { makeNextRequest } from "./_helpers";
 
-// ── mock supabase BEFORE the route module loads ──
-// vi.hoisted ensures mockDb is initialised before the hoisted vi.mock factory runs.
-// We cannot use imports inside vi.hoisted, so we build the mock inline.
-const { mockDb } = vi.hoisted(() => {
-  const db = {
-    from: vi.fn(),
-    auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null }),
-    },
-  };
-  return { mockDb: db };
-});
+// ── Mock getActorFromRequest ──────────────────────────────────────────────────
+const { mockGetActor } = vi.hoisted(() => ({
+  mockGetActor: vi.fn(),
+}));
 
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => mockDb),
+vi.mock("@/lib/server/get-actor", () => ({
+  getActorFromRequest: mockGetActor,
+}));
+
+// ── Mock DB helpers ───────────────────────────────────────────────────────────
+const { mockGetMembers, mockCreateMember } = vi.hoisted(() => ({
+  mockGetMembers: vi.fn(),
+  mockCreateMember: vi.fn(),
+}));
+
+vi.mock("@/lib/db/members", () => ({
+  getMembers: mockGetMembers,
+  createMember: mockCreateMember,
 }));
 
 // Import AFTER mocking
@@ -32,6 +35,22 @@ import { GET, POST } from "@/app/api/members/route";
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
+
+const TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
+const ADMIN_ACTOR = {
+  id: "m-001",
+  name: "Admin User",
+  role: "Admin",
+  tenantId: TENANT_ID,
+};
+
+const COORDINATOR_ACTOR = {
+  id: "m-002",
+  name: "Coord User",
+  role: "Coordinator",
+  tenantId: TENANT_ID,
+};
 
 const MOCK_MEMBER = {
   id: "m-001",
@@ -42,29 +61,14 @@ const MOCK_MEMBER = {
   magic_token: "tok-abc",
   is_active: true,
   created_at: "2026-01-01",
+  roles: [],
 };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: return empty arrays for all tables
-  mockDb.from.mockImplementation((table: string) => {
-    const map: Record<string, unknown[]> = {
-      members: [MOCK_MEMBER],
-      member_roles: [],
-      roles: [{ id: 1, name: "worship_lead" }],
-    };
-    const data = map[table] ?? [];
-    return {
-      select: vi.fn().mockReturnThis(),
-      insert: vi.fn().mockReturnThis(),
-      order: vi.fn().mockReturnThis(),
-      eq: vi.fn().mockReturnThis(),
-      in: vi.fn().mockReturnThis(),
-      single: vi.fn().mockReturnThis(),
-      then: (resolve: (v: unknown) => unknown) =>
-        Promise.resolve({ data, error: null }).then(resolve),
-    };
-  });
+  mockGetActor.mockResolvedValue(ADMIN_ACTOR);
+  mockGetMembers.mockResolvedValue([MOCK_MEMBER]);
+  mockCreateMember.mockResolvedValue(MOCK_MEMBER);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -72,14 +76,14 @@ beforeEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe("GET /api/members", () => {
   it("returns 200 with an array of members", async () => {
-    const res = await GET();
+    const res = await GET(makeNextRequest({ method: "GET", url: "http://localhost/api/members" }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body)).toBe(true);
   });
 
   it("merges roles onto each member result", async () => {
-    const res = await GET();
+    const res = await GET(makeNextRequest({ method: "GET", url: "http://localhost/api/members" }));
     const body = await res.json();
     // Each member should have a roles array (even if empty)
     body.forEach((m: unknown) => {
@@ -93,17 +97,17 @@ describe("GET /api/members", () => {
 // POST /api/members
 // ─────────────────────────────────────────────────────────────────────────────
 describe("POST /api/members — authorisation", () => {
-  it("returns 403 when x-app-role is Coordinator", async () => {
+  it("returns 403 when actor role is Coordinator", async () => {
+    mockGetActor.mockResolvedValue(COORDINATOR_ACTOR);
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/members",
-      headers: { "x-app-role": "Coordinator" },
       body: { name: "New User", email: "new@test.com" },
     });
     const res = await POST(req);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toMatch(/coordinator/i);
+    expect(body.error).toMatch(/not authorized/i);
   });
 });
 
@@ -140,28 +144,7 @@ describe("POST /api/members — validation", () => {
 });
 
 describe("POST /api/members — success path", () => {
-  it("returns 200 with the created member when Supabase succeeds", async () => {
-    // Re-wire the insert chain to return a created member
-    mockDb.from.mockImplementation((table: string) => {
-      if (table === "members") {
-        return {
-          insert: vi.fn().mockReturnThis(),
-          select: vi.fn().mockReturnThis(),
-          single: vi.fn().mockReturnThis(),
-          then: (resolve: (v: unknown) => unknown) =>
-            Promise.resolve({ data: MOCK_MEMBER, error: null }).then(resolve),
-        };
-      }
-      return {
-        select: vi.fn().mockReturnThis(),
-        in: vi.fn().mockReturnThis(),
-        insert: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve({ data: [], error: null }).then(resolve),
-      };
-    });
-
+  it("returns 200 with the created member when DB succeeds", async () => {
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/members",
@@ -175,26 +158,8 @@ describe("POST /api/members — success path", () => {
 });
 
 describe("POST /api/members — DB error propagation", () => {
-  it("returns 500 when Supabase insert fails", async () => {
-    mockDb.from.mockImplementation((table: string) => {
-      if (table === "members") {
-        return {
-          insert: vi.fn().mockReturnThis(),
-          select: vi.fn().mockReturnThis(),
-          single: vi.fn().mockReturnThis(),
-          then: (resolve: (v: unknown) => unknown) =>
-            Promise.resolve({
-              data: null,
-              error: { message: "DB constraint violation" },
-            }).then(resolve),
-        };
-      }
-      return {
-        select: vi.fn().mockReturnThis(),
-        then: (resolve: (v: unknown) => unknown) =>
-          Promise.resolve({ data: [], error: null }).then(resolve),
-      };
-    });
+  it("returns 500 when DB insert fails", async () => {
+    mockCreateMember.mockRejectedValue(new Error("DB constraint violation"));
 
     const req = makeNextRequest({
       method: "POST",

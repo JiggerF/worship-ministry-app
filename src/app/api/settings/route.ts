@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getTenantId } from "@/lib/server/tenant";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -8,10 +9,12 @@ if (!serviceKey) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY.");
 
 const supabase = createClient(supabaseUrl, serviceKey);
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const tenantId = getTenantId(req);
   const { data, error } = await supabase
     .from('app_settings')
     .select('key, value')
+    .eq('tenant_id', tenantId)
     .in('key', ['roster_pagination', 'setlist']);
 
   if (error) {
@@ -35,6 +38,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  const tenantId = getTenantId(req);
   let hasUpdate = false;
 
   if (typeof body.future_months === 'number' || typeof body.history_months === 'number') {
@@ -43,6 +47,7 @@ export async function PATCH(req: NextRequest) {
       .from('app_settings')
       .select('value')
       .eq('key', 'roster_pagination')
+      .eq('tenant_id', tenantId)
       .limit(1)
       .single();
     const prev = existing?.value ?? {};
@@ -52,7 +57,7 @@ export async function PATCH(req: NextRequest) {
     };
     const { error } = await supabase
       .from('app_settings')
-      .upsert({ key: 'roster_pagination', value: paginationPayload }, { onConflict: 'key' });
+      .upsert({ key: 'roster_pagination', value: paginationPayload, tenant_id: tenantId }, { onConflict: 'tenant_id,key' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     hasUpdate = true;
   }
@@ -63,7 +68,7 @@ export async function PATCH(req: NextRequest) {
     }
     const { error } = await supabase
       .from('app_settings')
-      .upsert({ key: 'setlist', value: { max_songs: body.max_songs_per_setlist } }, { onConflict: 'key' });
+      .upsert({ key: 'setlist', value: { max_songs: body.max_songs_per_setlist }, tenant_id: tenantId }, { onConflict: 'tenant_id,key' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     hasUpdate = true;
   }

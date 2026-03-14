@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
 import { restoreVersion, getHandbookEditorConfig } from "@/lib/db/handbook";
+import { getTenantId } from "@/lib/server/tenant";
 
 /** Resolve caller email from session cookies (mirrors /api/me + /api/handbook/[slug]). */
 async function resolveEmail(req: NextRequest): Promise<string | null> {
@@ -48,6 +49,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string; id: string }> }
 ) {
   const { slug, id } = await params;
+  const tenantId = getTenantId(req);
 
   const email = await resolveEmail(req);
   if (!email) {
@@ -59,13 +61,13 @@ export async function POST(
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  const { editorRoles, editorMemberIds } = await getHandbookEditorConfig();
+  const { editorRoles, editorMemberIds } = await getHandbookEditorConfig(tenantId);
   if (!editorRoles.includes(member.app_role as import("@/lib/types/database").AppRole) && !editorMemberIds.includes(member.id)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
-    const doc = await restoreVersion(slug, id, member.id, member.name);
+    const doc = await restoreVersion(tenantId, slug, id, member.id, member.name);
     return NextResponse.json(doc, { status: 201 });
   } catch (err) {
     console.error(`POST /api/handbook/${slug}/restore/${id} error:`, err);

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAuditLogEntry } from "@/lib/db/audit-log";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { getTenantId } from "@/lib/server/tenant";
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -14,10 +15,12 @@ const supabase = createClient(supabaseUrl, serviceKey);
 export async function GET(req: NextRequest) {
   // ?scope=portal hides internal_approved songs from the member-facing portal
   const scope = req.nextUrl.searchParams.get("scope");
+  const tenantId = getTenantId(req);
 
   let query = supabase
     .from("songs")
     .select(`*, chord_charts(*)`)
+    .eq("tenant_id", tenantId)
     .order("title", { ascending: true });
 
   if (scope === "portal") {
@@ -46,6 +49,7 @@ export async function POST(req: NextRequest) {
     categories: body.categories ?? null,
     youtube_url: body.youtube_url ?? null,
     scripture_anchor: body.scripture_anchor ?? null,
+    tenant_id: actor.tenantId,
     created_at: new Date().toISOString(),
   };
 
@@ -71,6 +75,7 @@ export async function POST(req: NextRequest) {
       actor_id: actor.id,
       actor_name: actor.name,
       actor_role: actor.role,
+      tenant_id: actor.tenantId,
       action: "create_song",
       entity_type: "song",
       entity_id: songData.id,

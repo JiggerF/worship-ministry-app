@@ -20,6 +20,7 @@ export interface UpsertSetlistSongPayload {
   position: number;       // 1–3
   chosen_key?: string | null;
   created_by?: string | null;
+  tenant_id: string;
 }
 
 // ─────────────────────────────────────────────
@@ -34,12 +35,14 @@ export interface UpsertSetlistSongPayload {
  *                       When false, returns all statuses (for authenticated WL roles).
  */
 export async function getSetlist(
+  tenantId: string,
   date: string,
   publishedOnly: boolean = true
 ): Promise<SetlistSongWithDetails[]> {
   let query = supabase
     .from("sunday_setlist")
     .select(`*, song:songs(*, chord_charts(*))`)
+    .eq("tenant_id", tenantId)
     .eq("sunday_date", date)
     .order("position", { ascending: true });
 
@@ -60,6 +63,7 @@ export async function upsertSetlistSong(
   payload: UpsertSetlistSongPayload
 ): Promise<SetlistSongWithDetails> {
   const row = {
+    tenant_id: payload.tenant_id,
     sunday_date: payload.sunday_date,
     song_id: payload.song_id,
     position: payload.position,
@@ -70,7 +74,7 @@ export async function upsertSetlistSong(
 
   const { data, error } = await supabase
     .from("sunday_setlist")
-    .upsert(row, { onConflict: "sunday_date,position" })
+    .upsert(row, { onConflict: "tenant_id,sunday_date,position" })
     .select(`*, song:songs(*, chord_charts(*))`)
     .single();
 
@@ -81,10 +85,11 @@ export async function upsertSetlistSong(
 /**
  * Revert all songs for the given Sunday date back to DRAFT.
  */
-export async function revertSetlist(date: string): Promise<void> {
+export async function revertSetlist(tenantId: string, date: string): Promise<void> {
   const { error } = await supabase
     .from("sunday_setlist")
     .update({ status: "DRAFT" })
+    .eq("tenant_id", tenantId)
     .eq("sunday_date", date);
 
   if (error) throw new Error(`revertSetlist: ${error.message}`);
@@ -103,13 +108,13 @@ export async function deleteSetlistSong(id: string): Promise<void> {
 }
 
 /**
- * Publish all DRAFT songs for the given Sunday date.
- * Saving again after this call reverts them to DRAFT.
+ * Publish all DRAFT songs for the given Sunday date, scoped to a tenant.
  */
-export async function publishSetlist(date: string): Promise<void> {
+export async function publishSetlist(tenantId: string, date: string): Promise<void> {
   const { error } = await supabase
     .from("sunday_setlist")
     .update({ status: "PUBLISHED" })
+    .eq("tenant_id", tenantId)
     .eq("sunday_date", date);
 
   if (error) throw new Error(`publishSetlist: ${error.message}`);

@@ -42,6 +42,53 @@ export type MemberRole =
   | "sound";
 
 // ─────────────────────────────────────────────
+// MULTI-TENANT TYPES
+// ─────────────────────────────────────────────
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  is_active: boolean;
+  settings: Record<string, unknown>;
+  created_at: string;
+}
+
+/**
+ * Per-tenant membership record.
+ * app_role here is the authoritative role for the (org, member) pair.
+ * members.app_role is deprecated — always read app_role from this table.
+ */
+export interface OrganizationMember {
+  organization_id: string;
+  member_id: string;
+  app_role: AppRole;
+  is_active: boolean;
+  joined_at: string;
+}
+
+export interface FeatureFlag {
+  id: string;
+  flag_key: string;
+  label: string;
+  description: string | null;
+  default_enabled: boolean;
+}
+
+export interface OrganizationFeature {
+  organization_id: string;
+  flag_id: string;
+  enabled: boolean;
+}
+
+export interface PlatformAdmin {
+  id: string;
+  email: string;
+  name: string;
+  created_at: string;
+}
+
+// ─────────────────────────────────────────────
 // BASE TABLE TYPES (mirror DB exactly)
 // ─────────────────────────────────────────────
 
@@ -50,6 +97,11 @@ export interface Member {
   name: string;
   email: string;
   phone: string | null;
+  /**
+   * @deprecated Global role column — only used as fallback in single-tenant mode.
+   * In multi-tenant mode always read app_role from organization_members for the
+   * relevant (organization_id, member_id) pair.
+   */
   app_role: AppRole;
   magic_token: string;
   is_active: boolean;
@@ -62,12 +114,14 @@ export interface Role {
 }
 
 export interface MemberRoleAssignment {
+  tenant_id: string;
   member_id: string;
   role_id: number;
 }
 
 export interface Availability {
   id: string;
+  tenant_id: string;
   member_id: string;
   date: string; // YYYY-MM-DD
   status: AvailabilityStatus;
@@ -78,6 +132,7 @@ export interface Availability {
 
 export interface RosterAssignment {
   id: string;
+  tenant_id: string;
   date: string; // YYYY-MM-DD
   role_id: number;
   member_id: string | null;
@@ -89,6 +144,7 @@ export interface RosterAssignment {
 
 export interface Song {
   id: string;
+  tenant_id: string;
   title: string;
   artist: string | null;
   status: SongStatus;
@@ -109,6 +165,7 @@ export interface ChordChart {
 
 export interface SetlistSong {
   id: string;
+  tenant_id: string;
   sunday_date: string;       // YYYY-MM-DD
   song_id: string;
   position: number;          // 1–3
@@ -117,6 +174,29 @@ export interface SetlistSong {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ─────────────────────────────────────────────
+// HANDBOOK
+// ─────────────────────────────────────────────
+
+export type HandbookChangeType = "minor" | "major";
+
+export interface HandbookDocument {
+  id: string;
+  tenant_id: string;
+  slug: string;
+  title: string;
+  content: string;
+  major_version: number;
+  minor_version: number;
+  is_current: boolean;
+  created_by: string | null;
+  created_by_name: string | null;
+  created_at: string;
+  change_type: HandbookChangeType;
+  what_changed: string[];
+  why_changed: string;
 }
 
 // ─────────────────────────────────────────────
@@ -177,6 +257,7 @@ export type AuditAction =
 
 export interface AuditLogRow {
   id: string;
+  tenant_id: string;
   created_at: string;
   actor_id: string | null;
   actor_name: string;
@@ -193,6 +274,7 @@ export interface AuditLogRow {
 
 export interface AvailabilityPeriod {
   id: string;
+  tenant_id: string;
   created_at: string;
   created_by: string | null;
   label: string;         // e.g. "April–May 2026"

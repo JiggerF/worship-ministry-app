@@ -3,7 +3,7 @@
 > **Status:** Draft — March 2026
 > **Pipeline:** `feature-planning-pipeline.md` (6-phase engineering planning cycle)
 > **Skills applied:** Product Manager, SaaS Architect, Systems Thinking, Staff Software Engineer, SDET/Quality Engineer
-> **Companion document:** [TECHNICAL_PLAN_WRKFLOW2.md](./TECHNICAL_PLAN_WRKFLOW2.md) (architecture design, test strategy, critical review)
+> **Companion document:** [TECHNICAL_PLAN_DESIGN2.md](./TECHNICAL_PLAN_DESIGN2.md) (architecture design, test strategy, critical review)
 > **Scale assumption:** 3 churches, ~20 musicians and ~60-100 songs each
 
 ---
@@ -38,6 +38,19 @@ These principles govern every change across all phases:
 | **Feature parity before onboarding** | Don't onboard Church #2 until every module correctly scopes data. |
 | **Every phase has exit criteria** | No phase is "done" without passing its verification checklist. |
 
+#### Zero-Downtime Migration Safety Reference
+
+Every schema change in Phase 0 is designed for zero downtime:
+
+| Change | Risk level | Why it's safe |
+|--------|-----------|--------------|
+| Adding nullable columns with DEFAULT | None | Existing queries ignore the new column |
+| Backfilling data | None | UPDATE on existing rows; no schema change |
+| Making NOT NULL | Low | Only after all rows verified non-null |
+| Adding indexes | None | CREATE INDEX CONCURRENTLY in Postgres |
+| Changing application queries | Medium | Deploy behind kill switch (`MULTI_TENANT_ENABLED`); gradual rollout |
+| Dropping `members.app_role` | Medium | Only after all code reads from `organization_members`; keep column for 1 release as safety net |
+
 ---
 
 ### Phase 0 — Database Foundation (1-2 weeks)
@@ -46,7 +59,7 @@ These principles govern every change across all phases:
 
 #### Step 0.1 — Pre-flight: Verify table naming
 
-**Action:** Check whether the production table is `member_roles` or `member_role_assignments`. The migration SQL uses one name, `lib/db/members.ts` uses another. See [Critical Finding F1](./TECHNICAL_PLAN_WRKFLOW2.md#finding-1-member_roles-vs-member_role_assignments-naming-inconsistency).
+**Action:** Check whether the production table is `member_roles` or `member_role_assignments`. The migration SQL uses one name, `lib/db/members.ts` uses another. See [Critical Finding F1](./TECHNICAL_PLAN_DESIGN2.md#finding-1-member_roles-vs-member_role_assignments-naming-inconsistency).
 
 ```bash
 # Run against production Supabase
@@ -518,7 +531,7 @@ interface AuditActor {
 
 **File: `src/app/api/members/route.ts`**
 
-Replace `x-app-role` header trust with `getActorFromRequest(req)`. See [Critical Finding F2](./TECHNICAL_PLAN_WRKFLOW2.md#finding-2-apimembers-post-handler-trusts-client-sent-x-app-role-header).
+Replace `x-app-role` header trust with `getActorFromRequest(req)`. See [Critical Finding F2](./TECHNICAL_PLAN_DESIGN2.md#finding-2-apimembers-post-handler-trusts-client-sent-x-app-role-header).
 
 #### Step 1.8 — Login flow update
 
@@ -655,6 +668,17 @@ if (!(await isFeatureEnabled(tenantId, "setlist"))) {
 
 All `/api/platform/*` routes validate caller is in `platform_admins` table.
 
+**Platform admin hardening requirements:**
+
+Platform admin session compromise = full system compromise. These safeguards are mandatory:
+
+| Requirement | Implementation |
+|-------------|----------------|
+| **Platform-level audit logging** | Every `/api/platform/*` mutation logs to a `platform_audit_log` table (separate from tenant `audit_log`). Captures: action, admin email, target tenant, timestamp. |
+| **Rate limiting on provisioning** | Max 10 tenant creations per hour per admin. Prevents accidental mass-provisioning or abuse. Implement via simple counter in `platform_admins` table or Vercel KV. |
+| **MFA consideration** | Consider requiring MFA for platform admin accounts via Supabase Auth MFA. Not MVP-blocking, but should be added before scaling beyond 3 tenants. |
+| **No tenant data access** | Platform admin routes can read tenant metadata (name, slug, member count) but never access tenant data (songs, rosters, availability). This is enforced by never passing a `tenant_id` to data queries from platform routes. |
+
 #### Step 2.6 — Tenant provisioning
 
 Provisioning calls a PostgreSQL stored procedure for atomicity (see [Appendix B](#appendix-b--provisioning-stored-procedure)).
@@ -701,7 +725,7 @@ Same process. Onboarding is now a 5-minute operation.
 
 New test file: `__tests__/integration/tenant-isolation.test.ts`
 
-See [TECHNICAL_PLAN §4.2](./TECHNICAL_PLAN_WRKFLOW2.md#42-integration-tests) for the full test specification. Covers every API endpoint with two-tenant fixtures.
+See [TECHNICAL_PLAN §4.2](./TECHNICAL_PLAN_DESIGN2.md#42-integration-tests) for the full test specification. Covers every API endpoint with two-tenant fixtures.
 
 #### Step 3.4 — Feature flag tests
 
@@ -786,6 +810,19 @@ Keep for 1 release as safety buffer.
 | `true` | Full multi-tenant scoping active |
 
 This allows deploying all code changes without activating multi-tenancy. Activation is a Vercel env var change + redeploy (< 1 minute), not a code change.
+
+**Graceful degradation pattern for API routes:**
+
+When `MULTI_TENANT_ENABLED=false`, `getTenantId()` returns `DEFAULT_TENANT_ID` (Church #1's UUID). This means all 25+ routes still call `.eq("tenant_id", tenantId)` — but with a hardcoded value that matches all existing data. No conditional branching needed in route code.
+
+If a critical bug is discovered post-activation:
+1. Flip `MULTI_TENANT_ENABLED=false` in Vercel (< 1 minute)
+2. All routes immediately revert to querying with Church #1's UUID
+3. Church #1 continues to operate normally
+4. Churches #2 and #3 are temporarily inaccessible (their subdomain fails org lookup)
+5. No data loss — tenant_id columns remain populated
+
+This is safer than the alternative (`if (tenantId) query.eq(...)`) because it avoids having two query paths in production. Every route always filters by tenant_id — the kill switch only controls *which* tenant_id is used, not *whether* filtering happens.
 
 ### 5.3 Rollout Sequence
 

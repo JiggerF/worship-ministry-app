@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
 import { getCurrentDoc, saveNewVersion, getHandbookEditorConfig } from "@/lib/db/handbook";
+import { getTenantId } from "@/lib/server/tenant";
 import type { SaveHandbookPayload } from "@/lib/types/handbook";
 
 /** Resolve the caller's email from session cookies (mirrors /api/me logic). */
@@ -50,8 +51,9 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const tenantId = getTenantId(_req);
   try {
-    const doc = await getCurrentDoc(slug);
+    const doc = await getCurrentDoc(tenantId, slug);
     if (!doc) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
@@ -71,6 +73,7 @@ export async function POST(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const tenantId = getTenantId(req);
 
   // --- Server-side role check ---
   const email = await resolveEmail(req);
@@ -83,7 +86,7 @@ export async function POST(
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  const { editorRoles, editorMemberIds } = await getHandbookEditorConfig();
+  const { editorRoles, editorMemberIds } = await getHandbookEditorConfig(tenantId);
   if (!editorRoles.includes(member.app_role as import("@/lib/types/database").AppRole) && !editorMemberIds.includes(member.id)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
@@ -129,6 +132,7 @@ export async function POST(
   // from the members table PK. We store the author's name in created_by_name instead.
   try {
     const doc = await saveNewVersion(
+      tenantId,
       slug,
       { content, change_type, what_changed, why_changed },
       null,

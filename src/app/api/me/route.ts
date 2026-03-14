@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
+import { getTenantId, isMultiTenantEnabled, WCC_TENANT_ID } from "@/lib/server/tenant";
+import { getEnabledFeatures } from "@/lib/server/feature-flags";
+import { createClient } from "@supabase/supabase-js";
 
 export async function GET(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -61,9 +64,61 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  const tenantId = getTenantId(req);
+
   try {
     const member = await getMemberByEmail(email);
-    const res = NextResponse.json(member);
+    if (!member) {
+      return NextResponse.json({ error: "Member not found" }, { status: 404 });
+    }
+
+    // In multi-tenant mode, resolve the per-tenant app_role from organization_members
+    let appRole = member.app_role;
+    if (isMultiTenantEnabled()) {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const serviceClient = createClient(supabaseUrl, serviceKey);
+        const { data: orgMember } = await serviceClient
+          .from("organization_members")
+          .select("app_role")
+          .eq("member_id", member.id)
+          .eq("organization_id", tenantId)
+          .single();
+        if (orgMember?.app_role) {
+          appRole = orgMember.app_role;
+        }
+      }
+    }
+
+    // Resolve tenant name
+    let tenantName: string | null = null;
+    if (tenantId !== WCC_TENANT_ID || isMultiTenantEnabled()) {
+      const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (supabaseUrl && serviceKey) {
+        const serviceClient = createClient(supabaseUrl, serviceKey);
+        const { data: org } = await serviceClient
+          .from("organizations")
+          .select("name")
+          .eq("id", tenantId)
+          .single();
+        tenantName = org?.name ?? null;
+      }
+    }
+
+    // Get enabled features for this tenant
+    const features = await getEnabledFeatures(tenantId).catch(() => [] as string[]);
+
+    const responseBody = {
+      ...member,
+      app_role: appRole,
+      tenant_id: tenantId,
+      tenant_name: tenantName,
+      features,
+    };
+
+    const res = NextResponse.json(responseBody);
     // Never cache — a stale identity would be served after switching logins.
     res.headers.set("Cache-Control", "no-store");
     return res;

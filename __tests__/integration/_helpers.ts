@@ -25,10 +25,18 @@ interface MockRequestOptions {
   cookies?: Record<string, string>;
 }
 
+// The WCC tenant UUID — injected by middleware into every real request.
+// Tests that call route handlers directly (bypassing middleware) must include
+// this header so getTenantId() resolves correctly when MULTI_TENANT_ENABLED=true.
+const DEFAULT_TENANT_ID = "00000000-0000-0000-0000-000000000001";
+
 export function makeNextRequest(options: MockRequestOptions = {}): NextRequest {
   const url = options.url ?? "http://localhost:3000/api/test";
 
-  const headers: Record<string, string> = { ...(options.headers ?? {}) };
+  const headers: Record<string, string> = {
+    "x-tenant-id": DEFAULT_TENANT_ID,
+    ...(options.headers ?? {}),
+  };
 
   const initOptions: RequestInit & { signal?: AbortSignal } = {
     method: options.method ?? "GET",
@@ -47,9 +55,9 @@ export function makeNextRequest(options: MockRequestOptions = {}): NextRequest {
     const cookieStr = Object.entries(options.cookies)
       .map(([k, v]) => `${k}=${v}`)
       .join("; ");
-    // Override the cookie header on the request
+    // Override the cookie header on the request (preserve default headers inc. x-tenant-id)
     const cookieHeaders: Record<string, string> = {
-      ...(options.headers ?? {}),
+      ...headers,
       cookie: cookieStr,
     };
     return new NextRequest(url, {

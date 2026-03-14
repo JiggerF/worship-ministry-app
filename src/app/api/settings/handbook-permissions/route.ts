@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
+import { getTenantId } from "@/lib/server/tenant";
 import type { AppRole } from "@/lib/types/database";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -48,11 +49,12 @@ async function resolveEmail(req: NextRequest): Promise<string | null> {
   return null;
 }
 
-async function loadPermissions(): Promise<{ editor_roles: AppRole[]; editor_member_ids: string[] }> {
+async function loadPermissions(tenantId: string): Promise<{ editor_roles: AppRole[]; editor_member_ids: string[] }> {
   const { data, error } = await supabase
     .from("app_settings")
     .select("value")
     .eq("key", SETTING_KEY)
+    .eq("tenant_id", tenantId)
     .single();
 
   if (error || !data) return { editor_roles: DEFAULT_EDITOR_ROLES, editor_member_ids: [] };
@@ -73,8 +75,9 @@ async function loadPermissions(): Promise<{ editor_roles: AppRole[]; editor_memb
 // GET /api/settings/handbook-permissions
 // Returns editor_roles and editor_member_ids. Any authenticated member may call this.
 // ---------------------------------------------------------------------------
-export async function GET() {
-  const perms = await loadPermissions();
+export async function GET(req: NextRequest) {
+  const tenantId = getTenantId(req);
+  const perms = await loadPermissions(tenantId);
   return NextResponse.json(perms);
 }
 
@@ -83,6 +86,7 @@ export async function GET() {
 // Updates editor_roles and/or editor_member_ids. Only Admin may change.
 // ---------------------------------------------------------------------------
 export async function PUT(req: NextRequest) {
+  const tenantId = getTenantId(req);
   const email = await resolveEmail(req);
   if (!email) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -133,8 +137,8 @@ export async function PUT(req: NextRequest) {
   const { error } = await supabase
     .from("app_settings")
     .upsert(
-      { key: SETTING_KEY, value: { editor_roles: finalRoles, editor_member_ids: finalMemberIds } },
-      { onConflict: "key" }
+      { key: SETTING_KEY, value: { editor_roles: finalRoles, editor_member_ids: finalMemberIds }, tenant_id: tenantId },
+      { onConflict: "tenant_id,key" }
     );
 
   if (error) {

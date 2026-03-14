@@ -179,6 +179,7 @@ export default function AdminSongsPage() {
           title: payload.title ?? "Untitled",
           artist: payload.artist ?? null,
           status: payload.status ?? "published",
+          tenant_id: "",
           categories: payload.categories ?? null,
           youtube_url: payload.youtube_url ?? null,
           scripture_anchor: payload.scripture_anchor ?? null,

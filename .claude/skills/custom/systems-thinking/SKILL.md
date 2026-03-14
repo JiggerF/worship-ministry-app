@@ -1,5 +1,5 @@
 ---
-name: Systems Thinking
+name: systems-thinking
 description: Use when analyzing complex systems where multiple components interact, such as SaaS platforms, AI agents, workflows, or organizational processes. Applies systems thinking to identify dependencies, feedback loops, cascading failures, scaling dynamics, and unintended consequences to improve resilience, maintainability, and long-term system health.
 ---
 

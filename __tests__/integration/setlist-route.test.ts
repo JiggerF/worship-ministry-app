@@ -45,11 +45,11 @@ import { PATCH as PATCH_REVERT } from "@/app/api/setlist/[id]/revert/route";
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000001", name: "Test Admin", role: "Admin" };
-const COORD_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000002", name: "Test Coord", role: "Coordinator" };
-const MC_ACTOR    = { id: "aaaaaaaa-0000-0000-0000-000000000003", name: "Music Coord", role: "MusicCoordinator" };
-const WL_ACTOR    = { id: "aaaaaaaa-0000-0000-0000-000000000004", name: "Worship Lead", role: "WorshipLeader" };
-const MUSICIAN_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000005", name: "Musician", role: "Musician" };
+const ADMIN_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000001", name: "Test Admin", role: "Admin", tenantId: "00000000-0000-0000-0000-000000000001" };
+const COORD_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000002", name: "Test Coord", role: "Coordinator", tenantId: "00000000-0000-0000-0000-000000000001" };
+const MC_ACTOR    = { id: "aaaaaaaa-0000-0000-0000-000000000003", name: "Music Coord", role: "MusicCoordinator", tenantId: "00000000-0000-0000-0000-000000000001" };
+const WL_ACTOR    = { id: "aaaaaaaa-0000-0000-0000-000000000004", name: "Worship Lead", role: "WorshipLeader", tenantId: "00000000-0000-0000-0000-000000000001" };
+const MUSICIAN_ACTOR = { id: "aaaaaaaa-0000-0000-0000-000000000005", name: "Musician", role: "Musician", tenantId: "00000000-0000-0000-0000-000000000001" };
 
 const DATE = "2026-03-01";
 const SONG_ID = "song-uuid-111";
@@ -111,7 +111,7 @@ describe("GET /api/setlist", () => {
     const req = makeNextRequest({ url: `http://localhost/api/setlist?date=${DATE}` });
     const res = await GET(req);
     expect(res.status).toBe(200);
-    expect(mockGetSetlist).toHaveBeenCalledWith(DATE, true);
+    expect(mockGetSetlist).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", DATE, true);
   });
 
   it("calls getSetlist with publishedOnly=true for Musician", async () => {
@@ -119,7 +119,7 @@ describe("GET /api/setlist", () => {
     const req = makeNextRequest({ url: `http://localhost/api/setlist?date=${DATE}` });
     const res = await GET(req);
     expect(res.status).toBe(200);
-    expect(mockGetSetlist).toHaveBeenCalledWith(DATE, true);
+    expect(mockGetSetlist).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", DATE, true);
   });
 
   it.each([
@@ -132,7 +132,7 @@ describe("GET /api/setlist", () => {
     const req = makeNextRequest({ url: `http://localhost/api/setlist?date=${DATE}` });
     const res = await GET(req);
     expect(res.status).toBe(200);
-    expect(mockGetSetlist).toHaveBeenCalledWith(DATE, false);
+    expect(mockGetSetlist).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", DATE, false);
   });
 
   it("returns 200 array of rows", async () => {
@@ -346,7 +346,7 @@ describe("PATCH /api/setlist/[date]/publish", () => {
     const body = await res.json();
     expect(body.published).toBe(true);
     expect(body.date).toBe(DATE);
-    expect(mockPublish).toHaveBeenCalledWith(DATE);
+    expect(mockPublish).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", DATE);
   });
 
   it("returns 500 when DB throws", async () => {
@@ -396,7 +396,7 @@ describe("PATCH /api/setlist/[date]/revert", () => {
     const body = await res.json();
     expect(body.reverted).toBe(true);
     expect(body.date).toBe(DATE);
-    expect(mockRevert).toHaveBeenCalledWith(DATE);
+    expect(mockRevert).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", DATE);
   });
 
   it("returns 500 when DB throws", async () => {

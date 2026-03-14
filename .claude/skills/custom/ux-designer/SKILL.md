@@ -1,5 +1,5 @@
 ---
-name: UX Designer
+name: ux-designer
 description: Use when designing user interfaces, workflows, or product interactions. Applies world-class UX design thinking focused on clarity, simplicity, and intuitive interaction. Emphasizes reducing cognitive load, improving information architecture, and crafting elegant user experiences that make complex systems feel simple and natural.
 ---
 

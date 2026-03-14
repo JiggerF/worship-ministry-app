@@ -1,5 +1,5 @@
 ---
-name: Staff Software Engineer
+name: staff-engineer
 description: Use when evaluating or implementing software systems, reviewing architecture decisions, planning engineering work, or improving code quality. Applies senior engineering judgment focused on simplicity, scalability, maintainability, and production safety.
 ---
 

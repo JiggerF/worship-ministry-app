@@ -1,7 +1,7 @@
-# SaaS Architecture Challenge Log (Workflow 2)
+# SaaS Architecture Challenge Log (Design 2)
 
 > **Date:** March 2026
-> **Reviewed documents:** [TECHNICAL_PLAN_WRKFLOW2.md](./TECHNICAL_PLAN_WRKFLOW2.md), [SAAS_ARCHITECTURE_WRKFLOW2.md](./SAAS_ARCHITECTURE_WRKFLOW2.md)
+> **Reviewed documents:** [TECHNICAL_PLAN_DESIGN2.md](./TECHNICAL_PLAN_DESIGN2.md), [SAAS_ARCHITECTURE_DESIGN2.md](./SAAS_ARCHITECTURE_DESIGN2.md)
 > **Review lenses:** Systems Thinking, Staff Software Engineer, SDET / Quality Engineer
 
 ---

@@ -1,5 +1,5 @@
 ---
-name: Product Manager
+name: product-manager
 description: Use when defining product problems, shaping feature ideas, prioritizing roadmap decisions, or evaluating product-market fit. Applies outcome-driven product thinking inspired by Teresa Torres and Geoffrey Moore, focusing on customer discovery, user needs, value propositions, and strategic positioning before implementation.
 ---
 

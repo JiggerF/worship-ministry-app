@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAuditLogEntry } from "@/lib/db/audit-log";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { getTenantId } from "@/lib/server/tenant";
 
 const supabaseUrl =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -119,6 +120,7 @@ export async function GET(req: NextRequest) {
     const viewParam = req.nextUrl.searchParams.get("view");
     const isPortalView = viewParam === "portal";
 
+    const tenantId = getTenantId(req);
     const actor = await getActorFromRequest(req);
     const canSeeDraft =
       !isPortalView &&
@@ -140,6 +142,7 @@ export async function GET(req: NextRequest) {
       roles:role_id ( id, name )
     `
       )
+      .eq("tenant_id", tenantId)
       .gte("date", start)
       .lte("date", end)
       .order("date", { ascending: true })
@@ -172,6 +175,7 @@ export async function GET(req: NextRequest) {
         .from("app_settings")
         .select("value")
         .eq("key", noteKey)
+        .eq("tenant_id", tenantId)
         .limit(1)
         .single();
       note = noteRes?.data?.value?.notes ?? null;
@@ -213,10 +217,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
+  const tenantId = getTenantId(req);
+
   const payload = body.assignments.map((a: { date: string; role_id: number; member_id: string | null }) => ({
     date: a.date,
     role_id: a.role_id,
     member_id: a.member_id ?? null,
+    tenant_id: tenantId,
     status: "DRAFT" as RosterStatus,
     assigned_at: new Date().toISOString(),
     locked_at: null,
@@ -224,7 +231,7 @@ export async function POST(req: NextRequest) {
 
   const { error } = await supabase
     .from("roster")
-    .upsert(payload, { onConflict: "date,role_id" });
+    .upsert(payload, { onConflict: "tenant_id,date,role_id" });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -239,6 +246,7 @@ export async function POST(req: NextRequest) {
         actor_id: actor.id,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "save_roster_draft",
         entity_type: "roster",
         summary: `Saved roster draft (${payload.length} assignment${payload.length !== 1 ? "s" : ""})`,
@@ -281,6 +289,7 @@ export async function PATCH(req: NextRequest) {
   if (body.notes !== undefined) {
     const key = `roster_note:${body.month}`;
     const value = { notes: body.notes };
+    const tenantId = getTenantId(req);
 
     if (!supabase) {
       if (USE_DEV) {
@@ -293,7 +302,7 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const { error } = await supabase.from('app_settings').upsert({ key, value }, { onConflict: 'key' });
+    const { error } = await supabase.from('app_settings').upsert({ key, value, tenant_id: tenantId }, { onConflict: 'tenant_id,key' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     // Await audit before returning — fire-and-forget .then() is dropped by serverless
@@ -305,6 +314,7 @@ export async function PATCH(req: NextRequest) {
           actor_id: actor.id,
           actor_name: actor.name,
           actor_role: actor.role,
+          tenant_id: actor.tenantId,
           action: "save_roster_note",
           entity_type: "roster",
           summary: `Updated roster note for ${body.month}`,
@@ -337,10 +347,12 @@ export async function PATCH(req: NextRequest) {
     }
 
     const { start, end } = getMonthRange(parsedRevert.year, parsedRevert.month);
+    const tenantId = getTenantId(req);
 
     const { error } = await supabase
       .from("roster")
       .update({ status: "DRAFT", locked_at: null })
+      .eq("tenant_id", tenantId)
       .gte("date", start)
       .lte("date", end);
 
@@ -355,6 +367,7 @@ export async function PATCH(req: NextRequest) {
           actor_id: actor.id,
           actor_name: actor.name,
           actor_role: actor.role,
+          tenant_id: actor.tenantId,
           action: "revert_roster",
           entity_type: "roster",
           summary: `Reverted roster for ${body.month} to draft`,
@@ -375,6 +388,7 @@ export async function PATCH(req: NextRequest) {
       status: "LOCKED" as RosterStatus,
       locked_at: new Date().toISOString(),
     })
+    .eq("tenant_id", getTenantId(req))
     .gte("date", start)
     .lte("date", end);
 
@@ -391,6 +405,7 @@ export async function PATCH(req: NextRequest) {
         actor_id: actor.id,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "finalize_roster",
         entity_type: "roster",
         summary: `Finalized roster for ${body.month}`,

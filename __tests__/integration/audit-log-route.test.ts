@@ -30,8 +30,8 @@ import { GET } from "@/app/api/audit-log/route";
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_ACTOR = { id: "actor-1", name: "Test Admin", role: "Admin" };
-const COORD_ACTOR = { id: "actor-2", name: "Test Coord", role: "Coordinator" };
+const ADMIN_ACTOR = { id: "actor-1", name: "Test Admin", role: "Admin", tenantId: "00000000-0000-0000-0000-000000000001" };
+const COORD_ACTOR = { id: "actor-2", name: "Test Coord", role: "Coordinator", tenantId: "00000000-0000-0000-0000-000000000001" };
 
 const DEFAULT_LOG_RESULT = {
   entries: [
@@ -124,7 +124,7 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?page=2",
     });
     const res = await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(2, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 2, "desc");
     const body = await res.json();
     expect(body.page).toBe(2);
   });
@@ -134,13 +134,13 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?sort=asc",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "asc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "asc");
   });
 
   it("defaults sort to 'desc' when sort param is absent", async () => {
     const req = makeNextRequest({ url: "http://localhost/api/audit-log" });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("defaults sort to 'desc' when sort param is an unknown value", async () => {
@@ -148,13 +148,13 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?sort=random",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("defaults page to 1 when page param is absent", async () => {
     const req = makeNextRequest({ url: "http://localhost/api/audit-log" });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("defaults page to 1 when page param is non-numeric", async () => {
@@ -162,7 +162,7 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?page=invalid",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("defaults page to 1 when page param is zero (clamps to min 1)", async () => {
@@ -170,7 +170,7 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?page=0",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("defaults page to 1 when page param is negative", async () => {
@@ -178,7 +178,7 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?page=-5",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(1, "desc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 1, "desc");
   });
 
   it("forwards page=5 and sort=asc together", async () => {
@@ -186,7 +186,7 @@ describe("GET /api/audit-log — query params", () => {
       url: "http://localhost/api/audit-log?page=5&sort=asc",
     });
     await GET(req);
-    expect(mockGetAuditLog).toHaveBeenCalledWith(5, "asc");
+    expect(mockGetAuditLog).toHaveBeenCalledWith("00000000-0000-0000-0000-000000000001", 5, "asc");
   });
 });
 

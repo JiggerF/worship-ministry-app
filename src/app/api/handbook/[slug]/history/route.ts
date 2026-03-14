@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDocHistory } from "@/lib/db/handbook";
+import { getTenantId } from "@/lib/server/tenant";
 
 // MVP2: returns full version history for a slug.
 // Stubbed in MVP1 — returns empty array.
@@ -10,8 +11,9 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
+  const tenantId = getTenantId(_req);
   try {
-    const history = await getDocHistory(slug);
+    const history = await getDocHistory(tenantId, slug);
     return NextResponse.json(history);
   } catch (err) {
     console.error(`GET /api/handbook/${slug}/history error:`, err);

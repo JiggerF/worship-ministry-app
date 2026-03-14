@@ -1,5 +1,5 @@
 ---
-name: SDET / Quality Engineer
+name: SDET-quality-engineer
 description: Use when reviewing feature quality, defining automated test coverage, analyzing edge cases, or assessing system reliability. Applies world-class SDET practices focused on correctness, observability, regression prevention, multi-tenant safety, and AI-agent failure handling across unit, integration, and end-to-end workflows.
 ---
 

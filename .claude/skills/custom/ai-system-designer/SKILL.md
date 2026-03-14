@@ -1,5 +1,5 @@
 ---
-name: AI Systems Designer
+name: ai-system-designer
 description: Use when designing AI-powered systems such as agents, LLM workflows, prompt pipelines, or human-AI collaboration tools. Applies system-level thinking to define agent responsibilities, orchestration patterns, safety guardrails, and evaluation strategies for reliable AI behavior in production applications.
 ---
 

@@ -112,7 +112,7 @@ function isLocked(targetYear: number, targetMonth: number) {
 
 async function getMemberRoles(memberId: string) {
   const { data: memberRoles, error: mrError } = await supabase
-    .from("member_roles")
+    .from("member_role_assignments")
     .select("role_id")
     .eq("member_id", memberId);
 

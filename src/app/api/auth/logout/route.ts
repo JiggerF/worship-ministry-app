@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   if (actor) {
     try {
       await createAuditLogEntry({
+        tenant_id: actor.tenantId,
         actor_id: actor.id,
         actor_name: actor.name,
         actor_role: actor.role,

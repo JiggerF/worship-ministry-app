@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { getTenantId } from "@/lib/server/tenant";
 import { getSetlist, upsertSetlistSong } from "@/lib/db/setlist";
 import { createAuditLogEntry } from "@/lib/db/audit-log";
 import type { AppRole } from "@/lib/types/database";
@@ -10,12 +11,13 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
-async function getMaxSongsPerSetlist(): Promise<number> {
+async function getMaxSongsPerSetlist(tenantId: string): Promise<number> {
   try {
     const { data } = await supabaseAdmin
       .from('app_settings')
       .select('value')
       .eq('key', 'setlist')
+      .eq('tenant_id', tenantId)
       .limit(1)
       .single();
     return data?.value?.max_songs ?? 3;
@@ -38,11 +40,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Missing or invalid ?date=YYYY-MM-DD" }, { status: 400 });
   }
 
+  const tenantId = getTenantId(req);
   const actor = await getActorFromRequest(req);
   const canSeeDrafts = actor !== null && SETLIST_ROLES.includes(actor.role as AppRole);
 
   try {
-    const rows = await getSetlist(date, /* publishedOnly */ !canSeeDrafts);
+    const rows = await getSetlist(tenantId, date, /* publishedOnly */ !canSeeDrafts);
     return NextResponse.json(rows);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -82,7 +85,7 @@ export async function POST(req: NextRequest) {
   if (!song_id) {
     return NextResponse.json({ error: "Missing song_id" }, { status: 400 });
   }
-  const maxSongs = await getMaxSongsPerSetlist();
+  const maxSongs = await getMaxSongsPerSetlist(actor.tenantId);
   if (position === undefined || position === null || position < 1 || position > maxSongs) {
     return NextResponse.json({ error: `position must be between 1 and ${maxSongs}` }, { status: 400 });
   }
@@ -96,6 +99,7 @@ export async function POST(req: NextRequest) {
       position,
       chosen_key: chosen_key ?? null,
       created_by: UUID_RE.test(actor.id ?? "") ? actor.id : null,
+      tenant_id: actor.tenantId,
     });
 
     // Audit: fire-and-forget pattern (swallow errors — audit must never break primary ops)
@@ -104,6 +108,7 @@ export async function POST(req: NextRequest) {
         actor_id: actor.id ?? null,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "update_setlist",
         entity_type: "setlist",
         entity_id: sunday_date,

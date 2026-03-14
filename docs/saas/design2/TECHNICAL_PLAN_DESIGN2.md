@@ -4,7 +4,7 @@
 > **Pipeline:** `feature-planning-pipeline.md` (6-phase engineering planning cycle)
 > **Skills applied:** Product Manager, SaaS Architect, Systems Thinking, Staff Software Engineer, SDET/Quality Engineer
 > **System context:** [PROJECT-CONTEXT.md](../../../.claude/context/PROJECT-CONTEXT.md)
-> **Companion document:** [SAAS_ARCHITECTURE_WRKFLOW2.md](./SAAS_ARCHITECTURE_WRKFLOW2.md) (implementation roadmap)
+> **Companion document:** [SAAS_ARCHITECTURE_DESIGN2.md](./SAAS_ARCHITECTURE_DESIGN2.md) (implementation roadmap)
 > **Challenge log:** [CHALLENGE_LOG.md](./CHALLENGE_LOG.md) (critical review findings)
 
 ---
@@ -441,6 +441,8 @@ if (!song || song.tenant_id !== tenantId) {
 }
 ```
 
+> **Backward compatibility guarantee:** This is an additive change only — new fields (`tenant_id`, `tenant_name`, `features`) are added; no existing fields are removed or renamed. Existing client code that destructures only `{ id, name, email, app_role }` will continue to work without modification. The `app_role` value is now sourced from `organization_members` instead of `members`, but the field name and type are unchanged.
+
 ### 2.7 Feature Flag Resolution
 
 ```
@@ -492,6 +494,39 @@ For a given (tenantId, flagKey):
 - Every `<Link href="/admin/roster">` needs slug injection
 
 **Verdict:** Rejected. Subdomain approach requires no frontend URL changes — the app runs at identical paths, just on a different hostname. Vercel supports wildcard subdomains natively.
+
+### 2.10 Tenant Safety Rules for AI Agents
+
+AI agents are **not yet built** — no `anthropic`, `openai`, or `langchain` in `package.json` today. However, the platform explicitly plans AI-assisted automation (see `CLAUDE.md` → AI Agent Philosophy). These rules must be enforced from day one when agents are introduced.
+
+**Rule 1: Tenant context must be injected, never inferred.**
+Every agent invocation receives `tenantId` as an explicit parameter. The agent never discovers its tenant from the data it processes.
+
+```typescript
+// CORRECT
+async function recommendRoster(tenantId: string, sundayDate: string) {
+  const members = await getMembers(tenantId);
+  const availability = await getAvailability(tenantId, sundayDate);
+  // ... agent logic using only this tenant's data
+}
+
+// WRONG
+async function recommendRoster(sundayDate: string) {
+  const members = await supabase.from("members").select("*"); // ALL tenants!
+}
+```
+
+**Rule 2: All data queries within an agent must use tenant-scoped helpers.**
+Agents must use `getMembers(tenantId)`, `getRoster(tenantId, month)`, etc. — never raw `supabase.from()`. This ensures the same tenant boundary that protects API routes also protects agent data access.
+
+**Rule 3: Agent context windows must not contain cross-tenant data.**
+If using an LLM API (Claude, etc.) for recommendations, the prompt/context sent to the model must contain only the current tenant's data. This is a natural consequence of Rule 2 — if the data queries are tenant-scoped, the context will be too.
+
+**Rule 4: Agent outputs are recommendations only — human-approved per tenant.**
+Agents never auto-commit changes. A roster recommendation for Church A is reviewed and approved by Church A's Admin/Coordinator. This provides a human checkpoint that catches any context errors.
+
+**Rule 5: Agent audit trails are tenant-scoped.**
+When an agent generates a recommendation, log it to `audit_log` with the correct `tenant_id`. This ensures Church A's admin sees only their agent activity.
 
 ---
 
@@ -608,9 +643,9 @@ For a given (tenantId, flagKey):
 | Feature flag table empty (no definitions) | All features disabled (fail-closed) |
 | Provisioning stored procedure timeout | Transaction rolls back; no orphaned data |
 
-### 4.6 AI Agent Safety Tests (placeholder)
+### 4.6 AI Agent Safety Tests
 
-No AI agents exist yet. When built, verify:
+No AI agents exist yet. When built, these tests enforce the 5 safety rules defined in [Section 2.10](#210-tenant-safety-rules-for-ai-agents). Verify:
 
 | Test | Expected |
 |------|----------|
