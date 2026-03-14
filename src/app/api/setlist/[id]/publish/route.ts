@@ -27,13 +27,14 @@ export async function PATCH(
   }
 
   try {
-    await publishSetlist(date);
+    await publishSetlist(actor.tenantId, date);
 
     try {
       await createAuditLogEntry({
         actor_id: actor.id ?? null,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "publish_setlist",
         entity_type: "setlist",
         entity_id: date,

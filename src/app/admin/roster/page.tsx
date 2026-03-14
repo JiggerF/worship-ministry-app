@@ -224,6 +224,7 @@ export default function AdminRosterPage() {
             assigned_by: null,
             assigned_at: a.assigned_at,
             locked_at: a.locked_at,
+            tenant_id: (a as RosterAssignmentWithDetails).tenant_id ?? "",
             member: a.member ?? a.members,
           })) ?? [];
 
@@ -264,6 +265,7 @@ export default function AdminRosterPage() {
             assigned_by: null,
             assigned_at: new Date().toISOString(),
             locked_at: null,
+            tenant_id: "",
             role: { id: ROLE_ID_MAP[a.role as MemberRole], name: a.role },
             member: a.member ?? undefined,
           }));
@@ -778,6 +780,7 @@ export default function AdminRosterPage() {
                                     assigned_by: null,
                                     assigned_at: new Date().toISOString(),
                                     locked_at: null,
+                                    tenant_id: "",
                                     member,
                                   };
 

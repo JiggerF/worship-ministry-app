@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     .from("songs")
     .update(songFields)
     .eq("id", id)
+    .eq("tenant_id", actor.tenantId)
     .select()
     .single();
 
@@ -63,6 +64,7 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
       actor_id: actor.id,
       actor_name: actor.name,
       actor_role: actor.role,
+      tenant_id: actor.tenantId,
       action: "update_song",
       entity_type: "song",
       entity_id: id,
@@ -86,10 +88,10 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
   const { id } = await params;
 
   // Fetch title before deleting for the audit summary
-  const { data: existing } = await supabase.from("songs").select("title").eq("id", id).single();
+  const { data: existing } = await supabase.from("songs").select("title").eq("id", id).eq("tenant_id", actor.tenantId).single();
 
   // chord_charts will cascade delete via FK constraint
-  const { error } = await supabase.from("songs").delete().eq("id", id);
+  const { error } = await supabase.from("songs").delete().eq("id", id).eq("tenant_id", actor.tenantId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   // Await audit before returning — fire-and-forget .then() is dropped by serverless
@@ -100,6 +102,7 @@ export async function DELETE(req: NextRequest, { params }: RouteContext) {
       actor_id: actor.id,
       actor_name: actor.name,
       actor_role: actor.role,
+      tenant_id: actor.tenantId,
       action: "delete_song",
       entity_type: "song",
       entity_id: id,

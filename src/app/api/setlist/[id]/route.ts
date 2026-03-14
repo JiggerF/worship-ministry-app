@@ -34,6 +34,7 @@ export async function DELETE(
         actor_id: actor.id ?? null,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "delete_setlist_song",
         entity_type: "setlist",
         entity_id: id,

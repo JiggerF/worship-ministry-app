@@ -47,7 +47,7 @@ const PERIOD = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" });
+  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin", tenantId: "00000000-0000-0000-0000-000000000001" });
   mockListPeriodsWithCounts.mockResolvedValue([PERIOD]);
   mockCreatePeriod.mockResolvedValue(PERIOD);
 });
@@ -121,6 +121,7 @@ describe("POST /api/availability/periods", () => {
     const body = await res.json();
     expect(body.id).toBe("p-001");
     expect(mockCreatePeriod).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000001",
       expect.objectContaining({
         label: "April–May 2026",
         starts_on: "2026-04-05",
@@ -198,6 +199,7 @@ describe("POST /api/availability/periods", () => {
     });
     await POST(req);
     expect(mockCreatePeriod).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000001",
       expect.objectContaining({ label: "April–May 2026" })
     );
   });
@@ -209,6 +211,7 @@ describe("POST /api/availability/periods", () => {
     });
     await POST(req);
     expect(mockCreatePeriod).toHaveBeenCalledWith(
+      "00000000-0000-0000-0000-000000000001",
       expect.objectContaining({ deadline: null })
     );
   });

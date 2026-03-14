@@ -1,27 +1,47 @@
 // @vitest-environment node
 /**
- * Integration tests for PUT /api/members/[id]
+ * Integration tests for PUT /api/members/[id] and DELETE /api/members/[id]
  * src/app/api/members/[id]/route.ts
  *
- * Tests body validation, supabase update chains, and role assignment.
- * Supabase is fully mocked — no real DB required.
+ * Tests auth, body validation, member update, and delete.
+ * getActorFromRequest and DB helpers are fully mocked — no real DB required.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { makeNextRequest, makeChain } from "./_helpers";
+import { makeNextRequest } from "./_helpers";
 
 // ── hoisted mock refs ──────────────────────────────────────────────────────
-const { mockDb } = vi.hoisted(() => {
-  const db = { from: vi.fn() };
-  return { mockDb: db };
-});
-
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => mockDb),
+const { mockGetActor, mockUpdateMember, mockDeleteMember } = vi.hoisted(() => ({
+  mockGetActor: vi.fn(),
+  mockUpdateMember: vi.fn(),
+  mockDeleteMember: vi.fn(),
 }));
 
-const { PUT } = await import("@/app/api/members/[id]/route");
+vi.mock("@/lib/server/get-actor", () => ({
+  getActorFromRequest: mockGetActor,
+}));
+
+vi.mock("@/lib/db/members", () => ({
+  updateMember: mockUpdateMember,
+  deleteMember: mockDeleteMember,
+}));
+
+const { PUT, DELETE } = await import("@/app/api/members/[id]/route");
 
 // ── fixtures ───────────────────────────────────────────────────────────────
+const ADMIN_ACTOR = {
+  id: "m-001",
+  name: "Admin User",
+  role: "Admin" as const,
+  tenantId: "00000000-0000-0000-0000-000000000001",
+};
+
+const COORDINATOR_ACTOR = {
+  id: "m-002",
+  name: "Coord User",
+  role: "Coordinator" as const,
+  tenantId: "00000000-0000-0000-0000-000000000001",
+};
+
 const MEMBER = {
   id: "m-1",
   name: "Bob",
@@ -39,23 +59,41 @@ function makeContext(id: string) {
 // ── setup ──────────────────────────────────────────────────────────────────
 beforeEach(() => {
   vi.clearAllMocks();
-  // Default: successful update returning the member
-  mockDb.from.mockImplementation((table: string) => {
-    if (table === "members") {
-      return makeChain({ data: MEMBER, error: null });
-    }
-    if (table === "roles") {
-      return makeChain({ data: [{ id: 1, name: "Guitar" }], error: null });
-    }
-    if (table === "member_roles") {
-      return makeChain({ data: [], error: null });
-    }
-    return makeChain({ data: null, error: null });
-  });
+  mockGetActor.mockResolvedValue(ADMIN_ACTOR);
+  mockUpdateMember.mockResolvedValue(MEMBER);
+  mockDeleteMember.mockResolvedValue(undefined);
 });
 
 // ── tests ──────────────────────────────────────────────────────────────────
 describe("PUT /api/members/[id]", () => {
+  describe("auth", () => {
+    it("returns 401 when actor cannot be resolved", async () => {
+      mockGetActor.mockResolvedValue(null);
+
+      const req = makeNextRequest({
+        method: "PUT",
+        url: "http://localhost:3000/api/members/m-1",
+        body: { name: "Robert" },
+      });
+
+      const res = await PUT(req, makeContext("m-1"));
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 when Coordinator attempts update", async () => {
+      mockGetActor.mockResolvedValue(COORDINATOR_ACTOR);
+
+      const req = makeNextRequest({
+        method: "PUT",
+        url: "http://localhost:3000/api/members/m-1",
+        body: { name: "Robert" },
+      });
+
+      const res = await PUT(req, makeContext("m-1"));
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe("input validation", () => {
     it("returns 400 when body is missing", async () => {
       const req = makeNextRequest({
@@ -85,9 +123,14 @@ describe("PUT /api/members/[id]", () => {
 
       expect(res.status).toBe(200);
       expect(body).toMatchObject({ id: "m-1", name: "Bob" });
+      expect(mockUpdateMember).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000001",
+        "m-1",
+        expect.objectContaining({ name: "Robert" })
+      );
     });
 
-    it("returns 200 with updated member and roles when roles array provided", async () => {
+    it("returns 200 with updated member and passes roles in changes", async () => {
       const req = makeNextRequest({
         method: "PUT",
         url: "http://localhost:3000/api/members/m-1",
@@ -97,20 +140,17 @@ describe("PUT /api/members/[id]", () => {
       const res = await PUT(req, makeContext("m-1"));
 
       expect(res.status).toBe(200);
-      // Confirm multiple tables were queried for role assignment
-      expect(mockDb.from).toHaveBeenCalledWith("roles");
-      expect(mockDb.from).toHaveBeenCalledWith("member_roles");
+      expect(mockUpdateMember).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000001",
+        "m-1",
+        expect.objectContaining({ roles: ["Guitar"] })
+      );
     });
   });
 
   describe("DB error propagation", () => {
     it("returns 500 when member update fails", async () => {
-      mockDb.from.mockImplementation((table: string) => {
-        if (table === "members") {
-          return makeChain({ data: null, error: { message: "Update failed" } });
-        }
-        return makeChain({ data: null, error: null });
-      });
+      mockUpdateMember.mockRejectedValue(new Error("Update failed"));
 
       const req = makeNextRequest({
         method: "PUT",
@@ -123,6 +163,70 @@ describe("PUT /api/members/[id]", () => {
 
       expect(res.status).toBe(500);
       expect(body.error).toBe("Update failed");
+    });
+  });
+});
+
+describe("DELETE /api/members/[id]", () => {
+  describe("auth", () => {
+    it("returns 401 when actor cannot be resolved", async () => {
+      mockGetActor.mockResolvedValue(null);
+
+      const req = makeNextRequest({
+        method: "DELETE",
+        url: "http://localhost:3000/api/members/m-1",
+      });
+
+      const res = await DELETE(req, makeContext("m-1"));
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 when non-Admin attempts delete", async () => {
+      mockGetActor.mockResolvedValue(COORDINATOR_ACTOR);
+
+      const req = makeNextRequest({
+        method: "DELETE",
+        url: "http://localhost:3000/api/members/m-1",
+      });
+
+      const res = await DELETE(req, makeContext("m-1"));
+      expect(res.status).toBe(403);
+    });
+  });
+
+  describe("successful delete", () => {
+    it("returns 200 with success when Admin deletes member", async () => {
+      const req = makeNextRequest({
+        method: "DELETE",
+        url: "http://localhost:3000/api/members/m-1",
+      });
+
+      const res = await DELETE(req, makeContext("m-1"));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.success).toBe(true);
+      expect(mockDeleteMember).toHaveBeenCalledWith(
+        "00000000-0000-0000-0000-000000000001",
+        "m-1"
+      );
+    });
+  });
+
+  describe("DB error propagation", () => {
+    it("returns 500 when delete fails", async () => {
+      mockDeleteMember.mockRejectedValue(new Error("Delete failed"));
+
+      const req = makeNextRequest({
+        method: "DELETE",
+        url: "http://localhost:3000/api/members/m-1",
+      });
+
+      const res = await DELETE(req, makeContext("m-1"));
+      const body = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(body.error).toBe("Delete failed");
     });
   });
 });

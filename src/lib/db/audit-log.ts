@@ -8,6 +8,7 @@ const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export type { AuditAction };
 
 export interface CreateAuditLogEntry {
+  tenant_id: string;
   actor_id: string | null;
   actor_name: string;
   actor_role: string;
@@ -49,10 +50,11 @@ export async function createAuditLogEntry(
 }
 
 /**
- * Fetch a paginated page of audit log entries.
+ * Fetch a paginated page of audit log entries, scoped to a tenant.
  * sortDir defaults to "desc" (newest first).
  */
 export async function getAuditLog(
+  tenantId: string,
   page = 1,
   sortDir: "asc" | "desc" = "desc"
 ): Promise<{ entries: AuditLogRow[]; total: number; pageSize: number }> {
@@ -67,6 +69,7 @@ export async function getAuditLog(
   const { data, error, count } = await supabase
     .from("audit_log")
     .select("*", { count: "exact" })
+    .eq("tenant_id", tenantId)
     .order("created_at", { ascending: sortDir === "asc" })
     .range(from, to);
 

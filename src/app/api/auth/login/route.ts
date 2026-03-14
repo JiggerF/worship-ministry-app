@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAuditLogEntry } from "@/lib/db/audit-log";
+import { getTenantId, isMultiTenantEnabled, WCC_TENANT_ID } from "@/lib/server/tenant";
 
 const supabaseUrl =
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -92,10 +93,29 @@ export async function POST(req: NextRequest) {
 
       if (memberData) {
         const member = memberData as { id: string; name: string; app_role: string };
+
+        // In multi-tenant mode, validate org membership for the resolved tenant
+        const tenantId = getTenantId(req);
+        if (isMultiTenantEnabled() && tenantId !== WCC_TENANT_ID) {
+          const { data: orgMember } = await serviceClient
+            .from("organization_members")
+            .select("is_active, app_role")
+            .eq("member_id", member.id)
+            .eq("organization_id", tenantId)
+            .single();
+          if (!orgMember || orgMember.is_active !== true) {
+            return NextResponse.json(
+              { error: "Not authorised for this organisation" },
+              { status: 403 }
+            );
+          }
+        }
+
         await createAuditLogEntry({
           actor_id: member.id,
           actor_name: member.name,
           actor_role: member.app_role,
+          tenant_id: getTenantId(req),
           action: "login",
           entity_type: "auth",
           entity_id: member.id,

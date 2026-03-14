@@ -83,7 +83,7 @@ function makeContext(id: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin" });
+  mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin", tenantId: "00000000-0000-0000-0000-000000000001" });
   mockGetPeriodDetail.mockResolvedValue(MEMBER_DETAIL);
   mockClosePeriod.mockResolvedValue(undefined);
 });
@@ -99,7 +99,7 @@ describe("GET /api/availability/periods/[id]", () => {
     const body = await res.json();
     expect(body.period.id).toBe("p-001");
     expect(body.members).toHaveLength(2);
-    expect(mockGetPeriodDetail).toHaveBeenCalledWith("p-001");
+    expect(mockGetPeriodDetail).toHaveBeenCalledWith("p-001", "00000000-0000-0000-0000-000000000001");
   });
 
   it("returns 200 for Coordinator role", async () => {

@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const sortDir: "asc" | "desc" = sortParam === "asc" ? "asc" : "desc";
 
   try {
-    const result = await getAuditLog(page, sortDir);
+    const result = await getAuditLog(actor.tenantId, page, sortDir);
     return NextResponse.json({ ...result, page });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Failed to fetch audit log";

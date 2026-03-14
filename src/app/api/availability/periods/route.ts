@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const periods = await listPeriodsWithCounts();
+    const periods = await listPeriodsWithCounts(actor.tenantId);
     return NextResponse.json(periods);
   } catch (err: unknown) {
     const e = err as { message?: string };
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   // This prevents duplicate availability data for the same Sundays, which breaks
   // the Roster availability map and confuses members with two identical magic links.
   try {
-    const existing = await listPeriodsWithCounts();
+    const existing = await listPeriodsWithCounts(actor.tenantId);
     const openPeriods = existing.filter((p) => !p.closed_at);
     const conflict = openPeriods.find((p) =>
       rangesOverlap(starts_on, ends_on, p.starts_on, p.ends_on)
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const period = await createPeriod({
+    const period = await createPeriod(actor.tenantId, {
       label: label.trim(),
       starts_on,
       ends_on,

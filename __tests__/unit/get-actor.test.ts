@@ -12,7 +12,7 @@ import { makeNextRequest } from "../integration/_helpers";
 // ── Build mock via vi.hoisted so references are valid inside vi.mock factory ──
 const { mockQuery, mockFrom, mockClient } = vi.hoisted(() => {
   const query: Record<string, unknown> = {};
-  const methods = ["select", "eq", "single"] as const;
+  const methods = ["select", "eq", "single", "maybeSingle"] as const;
   methods.forEach((m) => {
     query[m] = vi.fn().mockReturnValue(query);
   });
@@ -52,7 +52,7 @@ const VALID_MEMBER = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  const methods = ["select", "eq", "single"] as const;
+  const methods = ["select", "eq", "single", "maybeSingle"] as const;
   methods.forEach((m) => {
     (mockQuery[m] as ReturnType<typeof vi.fn>) = vi
       .fn()

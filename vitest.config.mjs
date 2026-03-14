@@ -26,6 +26,9 @@ export default defineConfig({
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
       SUPABASE_URL: "http://localhost:54321",
       SUPABASE_SERVICE_ROLE_KEY: "test-service-key",
+      // Run all tests with the multi-tenant kill switch ON so route tests cover
+      // the getTenantId() / x-tenant-id code path. This matches .env.local.
+      MULTI_TENANT_ENABLED: "true",
     },
     coverage: {
       provider: "v8",

@@ -24,11 +24,13 @@ export interface CreatePeriodPayload {
 }
 
 export async function createPeriod(
+  tenantId: string,
   payload: CreatePeriodPayload
 ): Promise<AvailabilityPeriod> {
   const { data, error } = await supabase
     .from("availability_periods")
     .insert({
+      tenant_id: tenantId,
       label: payload.label,
       starts_on: payload.starts_on,
       ends_on: payload.ends_on,
@@ -53,22 +55,24 @@ export async function getPeriod(id: string): Promise<AvailabilityPeriod | null> 
   return data as AvailabilityPeriod;
 }
 
-export async function listPeriods(): Promise<AvailabilityPeriod[]> {
+export async function listPeriods(tenantId: string): Promise<AvailabilityPeriod[]> {
   const { data, error } = await supabase
     .from("availability_periods")
     .select("*")
+    .eq("tenant_id", tenantId)
     .order("starts_on", { ascending: false });
 
   if (error) throw error;
   return (data ?? []) as AvailabilityPeriod[];
 }
 
-export async function listPeriodsWithCounts(): Promise<
+export async function listPeriodsWithCounts(tenantId: string): Promise<
   (AvailabilityPeriod & { response_count: number; total_musicians: number })[]
 > {
   const { data: periods, error: periodsError } = await supabase
     .from("availability_periods")
     .select("*")
+    .eq("tenant_id", tenantId)
     .order("starts_on", { ascending: false });
 
   if (periodsError) throw periodsError;
@@ -87,10 +91,11 @@ export async function listPeriodsWithCounts(): Promise<
     countMap.set(row.period_id, (countMap.get(row.period_id) ?? 0) + 1);
   }
 
-  // Count total active non-admin musicians once
+  // Count total active non-admin musicians in this tenant
   const { count: totalMusicians } = await supabase
-    .from("members")
-    .select("id", { count: "exact", head: true })
+    .from("organization_members")
+    .select("member_id", { count: "exact", head: true })
+    .eq("organization_id", tenantId)
     .eq("is_active", true)
     .not("app_role", "in", '("Admin")');
 
@@ -314,20 +319,27 @@ export interface MemberPeriodDetail {
 }
 
 export async function getPeriodDetailWithAllMembers(
-  periodId: string
+  periodId: string,
+  tenantId: string
 ): Promise<{ period: AvailabilityPeriod; members: MemberPeriodDetail[] } | null> {
   const period = await getPeriod(periodId);
   if (!period) return null;
 
-  // Fetch all active non-admin members
-  const { data: memberRows, error: memberError } = await supabase
-    .from("members")
-    .select("id, name, magic_token")
+  // Fetch all active non-admin members in this tenant via organization_members
+  const { data: orgMemberRows, error: orgErr } = await supabase
+    .from("organization_members")
+    .select("member_id, members!inner(id, name, magic_token)")
+    .eq("organization_id", tenantId)
     .eq("is_active", true)
-    .not("app_role", "in", '("Admin")')
-    .order("name", { ascending: true });
+    .not("app_role", "in", '("Admin")');
 
-  if (memberError) throw memberError;
+  if (orgErr) throw orgErr;
+
+  // Supabase returns embedded relations as arrays even with !inner — unwrap with flatMap
+  const memberRows = (orgMemberRows ?? []).flatMap(
+    (om: { member_id: string; members: { id: string; name: string; magic_token: string }[] }) =>
+      om.members ?? []
+  );
 
   // Fetch all responses for this period
   const { data: responseRows, error: respError } = await supabase

@@ -27,13 +27,14 @@ export async function PATCH(
   }
 
   try {
-    await revertSetlist(date);
+    await revertSetlist(actor.tenantId, date);
 
     try {
       await createAuditLogEntry({
         actor_id: actor.id ?? null,
         actor_name: actor.name,
         actor_role: actor.role,
+        tenant_id: actor.tenantId,
         action: "revert_setlist",
         entity_type: "setlist",
         entity_id: date,

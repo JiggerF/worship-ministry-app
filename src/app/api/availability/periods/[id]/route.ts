@@ -28,7 +28,7 @@ export async function GET(
   const { id } = await params;
 
   try {
-    const detail = await getPeriodDetailWithAllMembers(id);
+    const detail = await getPeriodDetailWithAllMembers(id, actor.tenantId);
     if (!detail) {
       return NextResponse.json({ error: "Period not found" }, { status: 404 });
     }
