@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const NAV_TABS = [
   { href: "/portal/roster", label: "Roster" },
@@ -15,12 +16,24 @@ export default function PortalLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const [tenantName, setTenantName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.tenant_name) setTenantName(data.tenant_name);
+      })
+      .catch(() => {/* stay on fallback */});
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 py-6 text-center">
-        <h1 className="text-2xl font-bold text-gray-900">WORDCC Worship Team</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{tenantName ?? "Worship Team"}</h1>
         <p className="text-sm text-gray-500 mt-1">Musicians Portal</p>
       </header>
 
