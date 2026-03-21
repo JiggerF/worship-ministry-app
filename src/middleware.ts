@@ -3,6 +3,44 @@ import { NextResponse, type NextRequest } from "next/server";
 import { WCC_TENANT_ID, isMultiTenantEnabled } from "@/lib/server/tenant";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Cookie helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Extracts the authenticated user's email from request cookies using two
+ * fallback strategies, matching the pattern in lib/server/platform-auth.ts:
+ *  1. Decode the sb-access-token JWT payload directly.
+ *  2. Parse the JSON in the sb:token cookie.
+ *
+ * Used when createServerClient.auth.getUser() fails because our custom cookie
+ * names (sb-access-token) don't match the @supabase/ssr expected format.
+ */
+function getEmailFromCookiesFallback(request: NextRequest): string | null {
+  // Strategy 1: decode JWT in sb-access-token
+  const access = request.cookies.get("sb-access-token")?.value;
+  if (access) {
+    try {
+      const parts = access.split(".");
+      if (parts.length === 3) {
+        const payload = JSON.parse(Buffer.from(parts[1], "base64").toString());
+        if (payload?.email) return payload.email as string;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Strategy 2: parse sb:token JSON cookie
+  const sbToken = request.cookies.get("sb:token")?.value;
+  if (sbToken) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(sbToken));
+      if (parsed?.user?.email) return parsed.user.email as string;
+    } catch { /* ignore */ }
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Route helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -14,16 +52,28 @@ function isAdminLogin(pathname: string) {
   return pathname === "/admin/login";
 }
 
+function isPlatformPath(pathname: string) {
+  return pathname.startsWith("/platform");
+}
+
+function isPlatformApiPath(pathname: string) {
+  return pathname.startsWith("/api/platform/");
+}
+
 /**
  * Routes that are accessibly publicly (no session required).
  * The tenant header is still injected, but auth is not enforced here.
  */
 function isPublicApiRoute(pathname: string) {
   // Availability magic-token routes are public (token-based auth only)
+  // /api/admin/member is middleware-internal: middleware calls it from the cookie
+  // fallback path (no cookies on internal fetch → no tenant context → guard would 404).
+  // The route validates org membership itself via the ?orgId= param.
   return (
     pathname.startsWith("/api/availability/") ||
     pathname === "/api/auth/login" ||
-    pathname === "/api/auth/logout"
+    pathname === "/api/auth/logout" ||
+    pathname === "/api/admin/member"
   );
 }
 
@@ -32,18 +82,18 @@ function isPublicApiRoute(pathname: string) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Resolves the tenant_id for the request.
+ * Resolves the tenant_id and tenant_name for the request.
  *
- * - Kill switch off (default): always returns WCC_TENANT_ID — no DB round-trip.
+ * - Kill switch off (default): always returns { id: WCC_TENANT_ID, name: "" } — no DB round-trip.
  * - Kill switch on: reads subdomain in production or ?org= query param in dev,
  *   then looks up the organizations table. Returns null if the org is not found
  *   or inactive.
  */
 async function resolveTenantId(
   request: NextRequest
-): Promise<string | null> {
+): Promise<{ id: string; name: string } | null> {
   if (!isMultiTenantEnabled()) {
-    return WCC_TENANT_ID;
+    return { id: WCC_TENANT_ID, name: "" };
   }
 
   const hostname = request.headers.get("host") ?? "";
@@ -55,12 +105,27 @@ async function resolveTenantId(
     // Production: wcc.worshipapp.com → "wcc"
     slug = hostname.split(".")[0] ?? null;
   } else if (isDev) {
-    // Dev: ?org=wcc query param
+    // Dev: ?org=<slug> query param (e.g. ?org=wcc, ?org=tenant2)
     slug = request.nextUrl.searchParams.get("org");
-    if (!slug) slug = "wcc"; // local fallback so dev always works
+    // NOTE: No default fallback to "wcc" here. In multi-tenant mode every tenant
+    // must be explicit. If no ?org= is supplied the session cookie fallback below
+    // is used (set at login time). Defaulting to "wcc" here was the root cause of
+    // the cross-tenant data leak: all admins silently resolved to Tenant 1.
   }
 
-  if (!slug) return null;
+  if (!slug) {
+    // Session cookie fallback: at login time /api/auth/login validates org membership
+    // and stamps this cookie with the verified tenant UUID. Reading it here lets
+    // subsequent requests work without a subdomain or ?org= param.
+    const tenantCookie = request.cookies.get("sb-tenant-id")?.value;
+    if (
+      tenantCookie &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantCookie)
+    ) {
+      return { id: tenantCookie, name: "" };
+    }
+    return null;
+  }
 
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -69,7 +134,7 @@ async function resolveTenantId(
   try {
     // Inline fetch to avoid importing the createClient helper
     // (middleware runs in Edge Runtime — keep deps minimal)
-    const url = `${supabaseUrl}/rest/v1/organizations?slug=eq.${encodeURIComponent(slug)}&is_active=eq.true&select=id&limit=1`;
+    const url = `${supabaseUrl}/rest/v1/organizations?slug=eq.${encodeURIComponent(slug)}&is_active=eq.true&select=id,name&limit=1`;
     const res = await fetch(url, {
       headers: {
         apikey: serviceKey,
@@ -78,8 +143,8 @@ async function resolveTenantId(
       },
     });
     if (!res.ok) return null;
-    const rows = await res.json() as { id: string }[];
-    return rows[0]?.id ?? null;
+    const rows = await res.json() as { id: string; name?: string }[];
+    return rows[0] ? { id: rows[0].id, name: rows[0].name ?? "" } : null;
   } catch {
     return null;
   }
@@ -106,21 +171,39 @@ export async function middleware(request: NextRequest) {
   // This prevents tenancy spoofing from any client.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete("x-tenant-id");
+  requestHeaders.delete("x-tenant-name");
 
-  const tenantId = await resolveTenantId(request);
+  const tenantResult = await resolveTenantId(request);
+  const tenantId = tenantResult?.id ?? null;
+  const tenantName = tenantResult?.name ?? null;
   if (tenantId) {
     requestHeaders.set("x-tenant-id", tenantId);
   }
+  if (tenantName) {
+    requestHeaders.set("x-tenant-name", tenantName);
+  }
+
 
   // Guard: unknown org slug → reject API calls immediately with a clean 404.
   // Without this, getTenantId() inside route handlers would throw an unhandled 500.
   if (!tenantId && isMultiTenantEnabled()) {
     const path = request.nextUrl.pathname;
-    if (path.startsWith("/api/") && !isPublicApiRoute(path)) {
-      return NextResponse.json(
-        { error: "Organization not found" },
-        { status: 404 }
-      );
+    // Block all /admin/* (except login) and /api/* (except public API) if tenant context is missing.
+    // /admin/login is intentionally allowed through — it doesn't need tenant context.
+    // Tenant resolution happens inside /api/auth/login from the user's credentials.
+    if ((path.startsWith("/admin/") && !isAdminLogin(path)) || (path.startsWith("/api/") && !isPublicApiRoute(path))) {
+      // Show a clear error for admin UI, JSON for API
+      if (path.startsWith("/admin/")) {
+        return new NextResponse(
+          '<html><body><h1>Organization Not Found</h1><p>This admin portal must be accessed from your church\'s subdomain URL. Please check your link or contact your administrator.</p></body></html>',
+          { status: 404, headers: { "Content-Type": "text/html" } }
+        );
+      } else {
+        return NextResponse.json(
+          { error: "Organization not found" },
+          { status: 404 }
+        );
+      }
     }
   }
 
@@ -143,6 +226,46 @@ export async function middleware(request: NextRequest) {
 
   // ─── Step 3: Public API routes — skip auth, tenant header already set ─────
   if (isPublicApiRoute(request.nextUrl.pathname)) {
+    return response;
+  }
+
+  // ─── Step 3b: /api/platform/* — auth handled by individual route handlers ─
+  // getPlatformAdmin() in each route verifies the caller is in platform_admins.
+  // Tenant injection is skipped for platform routes (they're cross-tenant).
+  if (isPlatformApiPath(request.nextUrl.pathname)) {
+    return response;
+  }
+
+  // ─── Step 3c: /platform/* page routes ─────────────────────────────────────
+  // The platform login page is public. All other platform pages redirect to
+  // /platform/login if the user has no session. The platform_admins table
+  // check is handled client-side via /api/platform/me in the platform layout.
+  if (isPlatformPath(request.nextUrl.pathname)) {
+    if (request.nextUrl.pathname === "/platform/login") {
+      return response;
+    }
+
+    // Require any Supabase session to access platform pages.
+    // Primary: @supabase/ssr createServerClient (works when Supabase sets its
+    //   own cookie format, e.g. after OAuth flows).
+    // Fallback: decode our custom sb-access-token / sb:token cookies directly,
+    //   which is the format set by our /api/auth/login route.
+    const platformClient = createServerClient(url, anon, {
+      cookies: {
+        getAll() { return request.cookies.getAll(); },
+        setAll() {},
+      },
+    });
+    const { data: platformSession } = await platformClient.auth.getUser();
+    const hasSession =
+      !!platformSession?.user || !!getEmailFromCookiesFallback(request);
+
+    if (!hasSession) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/platform/login";
+      return NextResponse.redirect(loginUrl);
+    }
+
     return response;
   }
 
@@ -236,26 +359,70 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(loginUrl);
       }
 
+      // Direct Supabase REST API lookup — replaces the previous self-fetch to
+      // /api/admin/member. The self-fetch was fragile because it went through
+      // middleware again (no cookies on server-side fetch → tenantId = null →
+      // tenant guard blocked it with 404 → outer middleware saw !res.ok →
+      // redirected to reason=not_admin). The compiled Edge Runtime chunk also
+      // cached stale versions of isPublicApiRoute, making the bypass unreliable.
+      // Direct REST calls are simpler, faster, and immune to that problem.
       try {
-        const adminApi = new URL('/api/admin/member', request.url);
-        adminApi.searchParams.set('email', email);
-        const res = await fetch(adminApi.toString(), { method: 'GET' });
+        const sbUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        if (!sbUrl) throw new Error('missing SUPABASE_URL');
 
-        if (!res.ok) {
-          const text = await res.text();
-          if (isDev) console.log('MIDDLEWARE: members fetch failed ->', res.status, text);
+        // 1. Look up the member by email (global members table)
+        const memberRes = await fetch(
+          `${sbUrl}/rest/v1/members?email=eq.${encodeURIComponent(email)}&select=id,app_role,is_active&limit=1`,
+          { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: 'application/json' } }
+        );
+        if (!memberRes.ok) {
+          if (isDev) console.log('MIDDLEWARE: member DB lookup failed ->', memberRes.status);
+          const loginUrl = request.nextUrl.clone();
+          loginUrl.pathname = '/admin/login';
+          loginUrl.searchParams.set('reason', 'not_admin');
+          return NextResponse.redirect(loginUrl);
+        }
+        const memberRows = await memberRes.json() as { id: string; app_role: string; is_active: boolean }[];
+        const member = memberRows[0] ?? null;
+        if (isDev) console.log('MIDDLEWARE: member DB lookup (fallback) ->', { member });
+
+        if (!member || member.is_active !== true) {
           const loginUrl = request.nextUrl.clone();
           loginUrl.pathname = '/admin/login';
           loginUrl.searchParams.set('reason', 'not_admin');
           return NextResponse.redirect(loginUrl);
         }
 
-        const members = await res.json();
-        const member = Array.isArray(members) ? members[0] ?? null : members;
-        if (isDev) console.log('MIDDLEWARE: members fetch (fallback) ->', { member });
-
         const ALLOWED_ROLES = ['Admin', 'Coordinator', 'WorshipLeader', 'MusicCoordinator'];
-        if (!member || member.is_active !== true || !ALLOWED_ROLES.includes(member.app_role)) {
+        let effectiveRole = member.app_role;
+
+        // 2. In multi-tenant mode, verify org membership and use per-tenant role
+        if (isMultiTenantEnabled() && tenantId) {
+          const orgRes = await fetch(
+            `${sbUrl}/rest/v1/organization_members?member_id=eq.${encodeURIComponent(member.id)}&organization_id=eq.${encodeURIComponent(tenantId)}&select=app_role,is_active&limit=1`,
+            { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, Accept: 'application/json' } }
+          );
+          if (!orgRes.ok) {
+            if (isDev) console.log('MIDDLEWARE: org membership lookup failed ->', orgRes.status);
+            const loginUrl = request.nextUrl.clone();
+            loginUrl.pathname = '/admin/login';
+            loginUrl.searchParams.set('reason', 'not_admin');
+            return NextResponse.redirect(loginUrl);
+          }
+          const orgRows = await orgRes.json() as { app_role: string; is_active: boolean }[];
+          const orgMember = orgRows[0] ?? null;
+          if (isDev) console.log('MIDDLEWARE: org membership (fallback) ->', { orgMember, tenantId });
+
+          if (!orgMember || orgMember.is_active !== true) {
+            const loginUrl = request.nextUrl.clone();
+            loginUrl.pathname = '/admin/login';
+            loginUrl.searchParams.set('reason', 'not_member_of_org');
+            return NextResponse.redirect(loginUrl);
+          }
+          effectiveRole = orgMember.app_role;
+        }
+
+        if (!ALLOWED_ROLES.includes(effectiveRole)) {
           const loginUrl = request.nextUrl.clone();
           loginUrl.pathname = '/admin/login';
           loginUrl.searchParams.set('reason', 'not_admin');
@@ -265,7 +432,7 @@ export async function middleware(request: NextRequest) {
         // Passed fallback check — allow through
         return response;
       } catch (e) {
-        if (isDev) console.log('MIDDLEWARE: members fetch error', e);
+        if (isDev) console.log('MIDDLEWARE: DB lookup error', e);
         const loginUrl = request.nextUrl.clone();
         loginUrl.pathname = '/admin/login';
         loginUrl.searchParams.set('reason', 'not_admin');
@@ -284,7 +451,7 @@ export async function middleware(request: NextRequest) {
 
     const { data: member, error: memberErr } = await supabase
       .from("members")
-      .select("app_role, is_active")
+      .select("id, app_role, is_active")
       .eq("email", email)
       .single();
 
@@ -303,9 +470,35 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
+    // In multi-tenant mode, enforce org boundary: verify the authenticated user
+    // is an active member of the RESOLVED TENANT's organization.
+    // Without this check, a WCC admin with a valid session could access
+    // tenant2.worshipapp.com because their global members.app_role is Admin.
+    let effectiveRole = member.app_role;
+    if (isMultiTenantEnabled() && tenantId) {
+      const { data: orgMember } = await supabase
+        .from("organization_members")
+        .select("app_role, is_active")
+        .eq("member_id", member.id)
+        .eq("organization_id", tenantId)
+        .maybeSingle();
+
+      if (isDev) console.log('MIDDLEWARE: org membership check ->', { orgMember, tenantId });
+
+      if (!orgMember || orgMember.is_active !== true || !ALLOWED_ROLES.includes(orgMember.app_role)) {
+        if (isDev) console.log('MIDDLEWARE: user is not a member of resolved tenant → redirecting to login');
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/admin/login";
+        loginUrl.searchParams.set("reason", "not_member_of_org");
+        return NextResponse.redirect(loginUrl);
+      }
+      effectiveRole = orgMember.app_role;
+    }
+
     // Route restrictions for Coordinator, WorshipLeader, and MusicCoordinator
+    // Use effectiveRole (per-tenant in multi-tenant mode, global in single-tenant).
     const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as const;
-    if (RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number])) {
+    if (RESTRICTED_ROLES.includes(effectiveRole as typeof RESTRICTED_ROLES[number])) {
       const path = request.nextUrl.pathname;
 
       // Block /admin/settings for all restricted roles
@@ -333,8 +526,8 @@ export async function middleware(request: NextRequest) {
       // Coordinator has full songs access (add/edit/delete) — skip song blocks
       // MusicCoordinator can edit songs but not add/delete
       // WorshipLeader is fully blocked from song write actions
-      if (path.startsWith("/admin/songs") && member.app_role !== "Coordinator") {
-        const isMusicCoordinator = member.app_role === "MusicCoordinator";
+      if (path.startsWith("/admin/songs") && effectiveRole !== "Coordinator") {
+        const isMusicCoordinator = effectiveRole === "MusicCoordinator";
         if (isMusicCoordinator && /add|delete/.test(path)) {
           const redirectUrl = request.nextUrl.clone();
           redirectUrl.pathname = path.replace(/(add|delete).*/, "");
@@ -355,5 +548,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/:path*", "/portal/:path*"],
+  matcher: ["/admin/:path*", "/api/:path*", "/portal/:path*", "/platform/:path*"],
 };

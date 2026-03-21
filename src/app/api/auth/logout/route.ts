@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
   res.cookies.set("sb-access-token", "", clearOptions);
   res.cookies.set("sb-refresh-token", "", clearOptions);
   res.cookies.set("sb:token", "", clearOptions);
+  // Clear the tenant session cookie — prevents stale tenant context on next login
+  res.cookies.set("sb-tenant-id", "", clearOptions);
   // Also clear the dev bypass cookie if present
   res.cookies.set("dev_auth", "", clearOptions);
 

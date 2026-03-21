@@ -171,6 +171,14 @@ export default function PortalRosterPage() {
     return getUpcomingSundayISO(parts);
   });
 
+  // Read ?org= from the portal URL so API calls carry tenant context in dev.
+  // In production (subdomain routing), ?org= is not needed — the subdomain
+  // already provides tenant context to every request.
+  const [orgSlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("org");
+  });
+
   // MONTHS built from the upcoming Sunday's month, not the calendar month.
   // Once the last Sunday of the current month passes, the upcoming Sunday
   // falls in the next month, so the left tab shifts forward automatically.
@@ -219,9 +227,10 @@ export default function PortalRosterPage() {
       setError(null);
 
       try {
-        const res = await fetch(`/api/roster?month=${activeMonth}&view=portal`, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `/api/roster?month=${activeMonth}&view=portal${orgSlug ? `&org=${encodeURIComponent(orgSlug)}` : ""}`,
+          { cache: "no-store" }
+        );
         const json = await res.json().catch(() => ({}));
 
         if (!res.ok) {
@@ -259,7 +268,10 @@ export default function PortalRosterPage() {
         const setlistResults = await Promise.all(
           sundaysForMonth.map(async (iso) => {
             try {
-              const r = await fetch(`/api/setlist?date=${iso}`, { cache: "no-store" });
+              const r = await fetch(
+                `/api/setlist?date=${iso}${orgSlug ? `&org=${encodeURIComponent(orgSlug)}` : ""}`,
+                { cache: "no-store" }
+              );
               if (!r.ok) return { date: iso, items: [] as SetlistItem[] };
               const data: unknown = await r.json();
               const rows = Array.isArray(data) ? (data as SetlistSongWithDetails[]) : [];
@@ -314,7 +326,7 @@ export default function PortalRosterPage() {
     return () => {
       cancelled = true;
     };
-  }, [activeMonth]);
+  }, [activeMonth, orgSlug]);
 
   /* ----------------------------- */
   /* Structure by Sunday           */

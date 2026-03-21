@@ -96,13 +96,16 @@ export async function revertSetlist(tenantId: string, date: string): Promise<voi
 }
 
 /**
- * Delete a setlist row by its UUID.
+ * Delete a setlist row by its UUID, scoped to the caller's tenant.
+ * The tenantId filter prevents cross-tenant IDOR: an admin from Tenant A
+ * cannot delete a setlist row that belongs to Tenant B even if they know its UUID.
  */
-export async function deleteSetlistSong(id: string): Promise<void> {
+export async function deleteSetlistSong(id: string, tenantId: string): Promise<void> {
   const { error } = await supabase
     .from("sunday_setlist")
     .delete()
-    .eq("id", id);
+    .eq("id", id)
+    .eq("tenant_id", tenantId);
 
   if (error) throw new Error(`deleteSetlistSong: ${error.message}`);
 }

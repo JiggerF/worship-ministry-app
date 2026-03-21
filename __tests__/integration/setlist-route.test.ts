@@ -296,7 +296,17 @@ describe("DELETE /api/setlist/[id]", () => {
     const req = makeNextRequest({ method: "DELETE", url: `http://localhost/api/setlist/${ENTRY_ID}` });
     const res = await DELETE(req, makeIdContext(ENTRY_ID));
     expect(res.status).toBe(204);
-    expect(mockDelete).toHaveBeenCalledWith(ENTRY_ID);
+    // GAP 1 fix: deleteSetlistSong must be called with both id AND tenantId
+    expect(mockDelete).toHaveBeenCalledWith(ENTRY_ID, actor.tenantId);
+  });
+
+  it("passes actor tenantId to deleteSetlistSong (prevents cross-tenant IDOR)", async () => {
+    const TENANT2_ACTOR = { ...ADMIN_ACTOR, tenantId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" };
+    mockGetActor.mockResolvedValue(TENANT2_ACTOR);
+    const req = makeNextRequest({ method: "DELETE", url: `http://localhost/api/setlist/${ENTRY_ID}` });
+    await DELETE(req, makeIdContext(ENTRY_ID));
+    // Must use Tenant2's ID — not a hardcoded value or WCC fallback
+    expect(mockDelete).toHaveBeenCalledWith(ENTRY_ID, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
   });
 
   it("returns 500 when DB throws", async () => {
