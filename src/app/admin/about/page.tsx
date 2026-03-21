@@ -66,7 +66,21 @@ export default function AboutPage() {
           </span>
         </div>
         <p className="text-sm text-gray-500">{APP_INFO.name} · {APP_INFO.releaseDate}</p>
-        <p className="text-xs text-gray-400 mt-1">Created by {APP_INFO.author.name}</p>
+        <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+          <p className="text-xs text-gray-400">Created by {APP_INFO.author.name}</p>
+          <a
+            href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Feedback`}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-gray-900 text-white text-xs font-medium hover:bg-gray-800 transition-colors"
+          >
+            Send Feedback
+          </a>
+          <a
+            href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Bug Report`}
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-gray-300 bg-white text-gray-700 text-xs font-medium hover:bg-gray-50 transition-colors"
+          >
+            Report a Bug
+          </a>
+        </div>
       </div>
 
       {/* ── Module status ─────────────────────────────────────────────────── */}
