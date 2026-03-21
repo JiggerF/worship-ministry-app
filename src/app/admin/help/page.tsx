@@ -1,10 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import React from "react";
 
-type RoleKey = "coordinator" | "worship-lead" | "music-coordinator";
+type RoleKey = "getting-started" | "coordinator" | "worship-lead" | "music-coordinator";
 
 const ROLES: Array<{ key: RoleKey; label: string; icon: string; subtitle: string }> = [
+  {
+    key: "getting-started",
+    label: "Getting Started",
+    icon: "🚀",
+    subtitle: "New team setup — get up and running in 6 steps",
+  },
   {
     key: "coordinator",
     label: "Worship Coordinator",
@@ -56,10 +63,8 @@ function AccessBadge({ label, allowed }: { label: string; allowed: boolean }) {
   );
 }
 
-import React from "react";
-
 export default function AdminHelpPage() {
-  const [activeRole, setActiveRole] = useState<RoleKey>("coordinator");
+  const [activeRole, setActiveRole] = useState<RoleKey>("getting-started");
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
@@ -67,7 +72,7 @@ export default function AdminHelpPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Help & Workflow Guide</h1>
         <p className="mt-1.5 text-sm text-gray-500">
-          Step-by-step guides to replace the manual spreadsheet and Google Form workflows. Select your role below.
+          New to the app? Start with <strong>Getting Started</strong>. Already set up? Select your role for a tailored workflow guide.
         </p>
       </div>
 
@@ -88,6 +93,143 @@ export default function AdminHelpPage() {
           </button>
         ))}
       </div>
+
+      {/* ── Getting Started ── */}
+      {activeRole === "getting-started" && (
+        <div>
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-1">New Team Setup</h2>
+            <p className="text-sm text-gray-600">
+              Work through these 6 steps in order. Allow 30–60 minutes for the initial setup. After that, monthly maintenance takes around 15–20 minutes.
+            </p>
+          </div>
+
+          <div className="space-y-0">
+            <Step number={1} title="Add your team members">
+              <p>Go to <strong>People</strong> in the sidebar and click <strong>+ Add Member</strong> for each person.</p>
+              <p className="mt-2">For each member, fill in their name, email, and assign:</p>
+              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li><strong>App Role</strong> — what they can do in the admin (Admin, Coordinator, Worship Leader, Music Coordinator, or Musician)</li>
+                <li><strong>Worship Roles</strong> — their instrument or position (e.g. Keys, Vocals Lead, Bass, Drums)</li>
+              </ul>
+              <Tip>Add everyone now, including occasional members. You can deactivate them later — their history is preserved.</Tip>
+            </Step>
+
+            <Step number={2} title="Build your song library">
+              <p>Go to <strong>Song Manager</strong> and click <strong>+ Add Song</strong> for each song your team plays.</p>
+              <p className="mt-2">For each song, add the title, artist, category, scripture, and at least one key. Paste a YouTube link and a chord sheet link (from Google Drive, OneDrive, etc.) if available.</p>
+              <ul className="list-disc pl-4 mt-2 space-y-0.5">
+                <li>Set status to <strong>Published</strong> for songs the team already knows well</li>
+                <li>Use <strong>Learning</strong> for songs you&apos;re currently introducing</li>
+              </ul>
+            </Step>
+
+            <Step number={3} title="Collect team availability">
+              <p>Before building the roster each month, collect availability from your team:</p>
+              <ol className="list-decimal pl-4 mt-2 space-y-1">
+                <li>Go to <strong>People</strong> and click <strong>Copy Link</strong> next to each member&apos;s name</li>
+                <li>Send each link to the musician via WhatsApp, SMS, or email</li>
+                <li>They fill in the form — no login needed. The same link works every month.</li>
+              </ol>
+              <Tip>Send links 2–3 weeks before building the roster so you have time to follow up with non-responders.</Tip>
+            </Step>
+
+            <Step number={4} title="Build the monthly roster">
+              <p>Go to <strong>Roster Manager</strong> and navigate to the month you&apos;re scheduling.</p>
+              <ol className="list-decimal pl-4 mt-2 space-y-1">
+                <li>Each row is a Sunday, each column is a role (Worship Lead, Vocals, Keys, etc.)</li>
+                <li>Click any cell and select a musician from the dropdown — availability hints are shown next to each name (✓ available, ? no response, ✗ unavailable)</li>
+                <li>Click <strong>Save Draft</strong> to save without publishing</li>
+                <li>When the roster is finalised, click <strong>Finalise</strong> to publish it to the musicians portal</li>
+              </ol>
+            </Step>
+
+            <Step number={5} title="Build Sunday setlists">
+              <p>Go to <strong>Setlist</strong>, select a Sunday, and click <strong>+ Add Song</strong> to choose songs for that service.</p>
+              <ol className="list-decimal pl-4 mt-2 space-y-1">
+                <li>Search by title, artist, or category to find songs quickly</li>
+                <li>Set the performance key for each song by clicking its key badge</li>
+                <li>Click <strong>Download PDF Bundle</strong> to generate a single chord chart PDF in all selected keys</li>
+                <li>Click <strong>Finalise</strong> when the setlist is ready for musicians to see</li>
+              </ol>
+            </Step>
+
+            <Step number={6} title="Share the musicians portal">
+              <p>Your musicians don&apos;t need a login. Share the portal link (<strong>/portal/roster</strong>) with your whole team — they can bookmark it.</p>
+              <p className="mt-2">What they can see:</p>
+              <ul className="list-disc pl-4 mt-1 space-y-0.5">
+                <li><strong>Roster tab</strong> — upcoming Sunday assignments and published setlists</li>
+                <li><strong>Song Library tab</strong> — all Published and Learning songs with YouTube links and chord charts</li>
+              </ul>
+              <Tip>Only finalised rosters and setlists appear on the portal. Drafts are always hidden from musicians.</Tip>
+            </Step>
+          </div>
+
+          {/* Monthly workflow summary */}
+          <div className="mt-8 bg-gray-50 border border-gray-200 rounded-xl p-5">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Monthly Workflow at a Glance</h3>
+            <div className="space-y-2 text-sm text-gray-600">
+              <div className="flex gap-3">
+                <span className="font-semibold text-gray-500 w-16 flex-shrink-0">Week 1</span>
+                <span>Send availability links to all team members</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="font-semibold text-gray-500 w-16 flex-shrink-0">Week 2</span>
+                <span>Build the roster once most availability is in · Build setlists for each Sunday</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="font-semibold text-gray-500 w-16 flex-shrink-0">Week 3</span>
+                <span>Finalise roster and setlists · Download PDF chord chart bundles</span>
+              </div>
+              <div className="flex gap-3">
+                <span className="font-semibold text-gray-500 w-16 flex-shrink-0">Ongoing</span>
+                <span>Add new songs · Members re-submit availability links if plans change</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick role permissions */}
+          <div className="mt-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900">Who Can Do What</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th className="px-4 py-2.5 text-left font-semibold text-gray-500">Action</th>
+                    <th className="px-3 py-2.5 text-center font-semibold text-gray-500">Admin</th>
+                    <th className="px-3 py-2.5 text-center font-semibold text-gray-500">Coordinator</th>
+                    <th className="px-3 py-2.5 text-center font-semibold text-gray-500">Worship Leader</th>
+                    <th className="px-3 py-2.5 text-center font-semibold text-gray-500">Music Coord.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {[
+                    ["Add / edit members", true, false, false, false],
+                    ["Send availability links", true, false, false, false],
+                    ["Build & finalise roster", true, true, false, false],
+                    ["Add / delete songs", true, true, false, false],
+                    ["Edit songs", true, true, false, true],
+                    ["Edit own Sunday setlist", true, true, true, true],
+                    ["Download chord chart PDF", true, true, true, true],
+                    ["Change app settings", true, false, false, false],
+                  ].map(([action, ...perms]) => (
+                    <tr key={action as string} className="hover:bg-gray-50">
+                      <td className="px-4 py-2.5 text-gray-700">{action as string}</td>
+                      {(perms as boolean[]).map((allowed, i) => (
+                        <td key={i} className="px-3 py-2.5 text-center text-gray-400">
+                          {allowed ? <span className="text-green-600 font-semibold">✓</span> : <span>—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Worship Coordinator ── */}
       {activeRole === "coordinator" && (
@@ -110,7 +252,7 @@ export default function AdminHelpPage() {
 
           <div className="space-y-0">
             <Step number={1} title="Open a new Availability Period (every 2 months)">
-              <p>Instead of sending a Google Form manually, create a period in the app:</p>
+              <p>Instead of sending a form manually, create a period in the app:</p>
               <ol className="list-decimal pl-4 mt-2 space-y-1">
                 <li>Go to <strong>Availability</strong> in the sidebar.</li>
                 <li>Click <strong>+ New Period</strong>.</li>
@@ -121,22 +263,22 @@ export default function AdminHelpPage() {
             </Step>
 
             <Step number={2} title="Send magic links to musicians">
-              <p>Each musician has a unique personal link — no account needed. This replaces the Google Form link you used to blast via Viber.</p>
+              <p>Each musician has a unique personal link — no account needed.</p>
               <ol className="list-decimal pl-4 mt-2 space-y-1">
                 <li>Go to <strong>People</strong> in the sidebar.</li>
                 <li>Find the musician and click <strong>Copy Link</strong> next to their name.</li>
-                <li>Paste and send it to them via Viber or WhatsApp.</li>
+                <li>Paste and send it to them via WhatsApp, SMS, or email.</li>
               </ol>
               <p className="mt-2">Each link is permanent and tied to that person — they can use the same link for every new period.</p>
               <Tip>Add new team members via the Admin account if someone&apos;s link is missing from People.</Tip>
             </Step>
 
             <Step number={3} title="Track who has responded">
-              <p>Instead of chasing people through WhatsApp to confirm who filled in the form:</p>
+              <p>Instead of chasing people manually to confirm who filled in the form:</p>
               <ol className="list-decimal pl-4 mt-2 space-y-1">
                 <li>Go to <strong>Availability</strong> and click on the open period.</li>
                 <li>The detail page shows each musician&apos;s response status per Sunday.</li>
-                <li>Follow up manually (Viber/WhatsApp) with anyone who hasn&apos;t responded before the deadline.</li>
+                <li>Follow up manually with anyone who hasn&apos;t responded before the deadline.</li>
               </ol>
             </Step>
 
@@ -281,11 +423,11 @@ export default function AdminHelpPage() {
             </Step>
 
             <Step number={2} title="Approve and onboard new songs">
-              <p>New songs must go through Pastoral approval before being used in services:</p>
+              <p>New songs must go through approval before being used in services:</p>
               <ol className="list-decimal pl-4 mt-2 space-y-1">
-                <li>The Worship Coordinator creates the song entry in the system (via <strong>Song Manager → + Add Song</strong>).</li>
-                <li>Before the song can be used, Pastoral staff must approve it for theological alignment — this happens outside the app (e.g. via conversation or email).</li>
-                <li>Once approved, it&apos;s your job to: create or source the chord chart, upload it to the song entry, find and add the YouTube video link, and set the correct status.</li>
+                <li>The Worship Coordinator or Admin creates the song entry via <strong>Song Manager → + Add Song</strong>.</li>
+                <li>Before the song can be used, it should be reviewed for theological alignment — this typically happens outside the app.</li>
+                <li>Once approved, it&apos;s your job to: create or source the chord chart, add the YouTube link, and set the correct status.</li>
                 <li>Only move a song to <strong>Published</strong> after it&apos;s been approved and fully set up.</li>
               </ol>
             </Step>

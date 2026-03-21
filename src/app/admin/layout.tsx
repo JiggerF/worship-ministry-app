@@ -52,6 +52,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: "/admin/help", label: "Help", icon: "❓" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
   { href: "/admin/audit", label: "Audit Log", icon: "🔍", feature: "audit_log" },
+  { href: "/admin/about", label: "About", icon: "ℹ️" },
 ];
 
 // Pages hidden for Coordinator, WorshipLeader, and MusicCoordinator
