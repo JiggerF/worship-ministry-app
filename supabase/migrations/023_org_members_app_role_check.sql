@@ -11,6 +11,15 @@
 -- Safe to apply: all existing rows were backfilled from members.app_role which
 -- only contains values from this set.
 
-ALTER TABLE public.organization_members
-  ADD CONSTRAINT organization_members_app_role_check
-  CHECK (app_role IN ('Admin', 'Coordinator', 'Musician', 'MusicCoordinator', 'WorshipLeader'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'organization_members_app_role_check'
+      AND table_name = 'organization_members'
+  ) THEN
+    ALTER TABLE public.organization_members
+      ADD CONSTRAINT organization_members_app_role_check
+      CHECK (app_role IN ('Admin', 'Coordinator', 'Musician', 'MusicCoordinator', 'WorshipLeader'));
+  END IF;
+END $$;
