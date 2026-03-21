@@ -732,14 +732,16 @@ export default function AdminRosterPage() {
                           <select
                             aria-label={`Assign ${ROLE_LABEL_MAP[role]}`}
                             value={assignment?.member_id ?? ""}
-                            className={`w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-2 text-gray-800 bg-white ${
+                            className={`w-full text-sm border rounded px-2 py-1 focus:outline-none focus:ring-2 text-gray-800 ${
                               assignedIsDoubleBooked
-                                ? "border-red-400 focus:ring-red-200"
+                                ? "border-red-400 focus:ring-red-200 bg-white"
                                 : assignedIsUnavailable
-                                ? "border-amber-400 focus:ring-amber-200"
+                                ? "border-amber-400 focus:ring-amber-200 bg-white"
                                 : assignedHasNoResponse
-                                ? "border-blue-400 focus:ring-blue-200"
-                                : "border-gray-300 focus:ring-green-200"
+                                ? "border-blue-400 focus:ring-blue-200 bg-white"
+                                : assignedId === null
+                                ? "border-dashed border-indigo-300 focus:ring-indigo-200 bg-indigo-50"
+                                : "border-gray-300 focus:ring-green-200 bg-white"
                             }`}
                             onChange={(e) => {
                               setIsDirty(true);
