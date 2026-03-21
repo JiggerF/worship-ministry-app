@@ -1,0 +1,22 @@
+-- Migration 025: Platform admin seeding — intentionally a no-op in migrations
+--
+-- The platform_admins table (created in migration 019) has no seed row here.
+-- Hardcoding a personal email address in a migration file creates permanent PII
+-- exposure in git history and seeds cross-tenant admin privilege into every
+-- environment (local dev, staging, forks) automatically.
+--
+-- Instead, seed the platform admin manually per-environment using the script:
+--
+--   npx tsx scripts/seed-platform-admin.ts
+--
+-- Set these environment variables before running:
+--   PLATFORM_ADMIN_EMAIL=your@email.com
+--   PLATFORM_ADMIN_NAME="Your Name"
+--   NEXT_PUBLIC_SUPABASE_URL=https://...
+--   SUPABASE_SERVICE_ROLE_KEY=...
+--
+-- The script uses ON CONFLICT (email) DO NOTHING — safe to re-run.
+-- This migration file exists as a placeholder to keep the migration sequence
+-- contiguous and to document the manual seeding requirement.
+
+-- (intentionally empty — see script above)

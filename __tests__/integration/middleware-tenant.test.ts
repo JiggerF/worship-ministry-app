@@ -390,4 +390,38 @@ describe("Middleware — x-tenant-name header injection (dynamic tenant labels)"
     // Unknown org → 404 (tenant guard fires before auth)
     expect(res.status).toBe(404);
   });
+
+  it("falls back to sb-tenant-id cookie when subdomain slug is present but unrecognised (worship.gracetoyou.com.au regression)", async () => {
+    // Regression: WCC org slug is 'wcc' but production subdomain is 'worship'.
+    // After MULTI_TENANT_ENABLED was set to true, slug = 'worship' was extracted,
+    // DB returned empty, tenantId was null, and all admin routes returned 404.
+    // Fix: when the slug lookup returns no rows, fall through to the sb-tenant-id
+    // cookie before returning null.
+    global.fetch = makeRestFetchMock({
+      orgRow: null, // slug 'worship' not found in DB
+      memberRow: { id: JULIUS_MEMBER_ID, app_role: "Admin", is_active: true },
+      orgMemberRow: { app_role: "Admin", is_active: true },
+    });
+
+    // Request with 'worship' subdomain but sb-tenant-id cookie already set (from prior login)
+    const cookieStr = [
+      `sb-tenant-id=${JULIUS_TENANT_ID}`,
+      `sb:token=${makeSbToken(JULIUS_EMAIL)}`,
+    ].join("; ");
+    const req = new NextRequest("https://worship.gracetoyou.com.au/admin/roster", {
+      headers: {
+        host: "worship.gracetoyou.com.au",
+        cookie: cookieStr,
+      },
+    });
+
+    const res = await middleware(req);
+
+    // Must NOT return 404 from tenant guard — tenant resolved via cookie fallback
+    expect(res.status).not.toBe(404);
+    // Must NOT redirect to /admin/login?reason=not_admin
+    expect(isNotAdminRedirect(res)).toBe(false);
+    // Should be allowed through (200)
+    expect(res.status).toBe(200);
+  });
 });

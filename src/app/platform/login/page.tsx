@@ -32,9 +32,9 @@ export default function PlatformLoginPage() {
       // Verify caller is actually a platform admin
       const meRes = await fetch("/api/platform/me", { cache: "no-store" });
       if (!meRes.ok) {
-        setError("You do not have platform admin access.");
-        // Clear the session so they can't access /admin either accidentally
-        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        setError("You do not have platform admin access. If you are a church admin, please go to your church's admin login page instead.");
+        // Do NOT call logout here — the user may be a valid church admin and
+        // destroying their session would lock them out of /admin/* as well.
         return;
       }
     } catch {

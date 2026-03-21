@@ -142,12 +142,32 @@ async function resolveTenantId(
         Accept: "application/json",
       },
     });
-    if (!res.ok) return null;
-    const rows = await res.json() as { id: string; name?: string }[];
-    return rows[0] ? { id: rows[0].id, name: rows[0].name ?? "" } : null;
+    if (!res.ok) {
+      // DB unreachable — fall through to cookie fallback below
+    } else {
+      const rows = await res.json() as { id: string; name?: string }[];
+      if (rows[0]) return { id: rows[0].id, name: rows[0].name ?? "" };
+      // slug was present but matched no org row — fall through to cookie fallback.
+      // This handles the case where the production subdomain (e.g. "worship" from
+      // worship.gracetoyou.com.au) does not match the slug stored in the DB (e.g.
+      // "wcc"). The sb-tenant-id cookie stamped at login time is the authoritative
+      // fallback — the user's org membership was already validated at login.
+    }
   } catch {
-    return null;
+    // network error — fall through to cookie fallback
   }
+
+  // Cookie fallback: use the tenant UUID stamped by /api/auth/login even when the
+  // subdomain slug lookup failed (unrecognised slug or network error).
+  const tenantCookie = request.cookies.get("sb-tenant-id")?.value;
+  if (
+    tenantCookie &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantCookie)
+  ) {
+    return { id: tenantCookie, name: "" };
+  }
+
+  return null;
 }
 
 export async function middleware(request: NextRequest) {

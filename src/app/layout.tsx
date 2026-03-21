@@ -14,27 +14,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WORDCC | Worship Ministry App",
-  description: "WORDCC - Plan, share, and play your worship setlists with ease. Chord charts, team rosters, and more—all in one place for WORDCC Church.",
+  title: "Worship Ministry App",
+  description: "Plan, share, and coordinate your worship team. Chord charts, team rosters, setlists, and more — all in one place.",
   openGraph: {
-    title: "WORDCC | Worship Ministry App",
-    description: "WORDCC - Plan, share, and play your worship setlists with ease. Chord charts, team rosters, and more—all in one place for WORDCC Church.",
-    url: "https://YOUR_PROD_URL_HERE", // Replace with your actual prod URL
-    siteName: "WORDCC",
+    title: "Worship Ministry App",
+    description: "Plan, share, and coordinate your worship team. Chord charts, team rosters, setlists, and more — all in one place.",
+    url: "https://worship.gracetoyou.com.au",
+    siteName: "Worship Ministry App",
     images: [
       {
         url: "/og-wordcc.png",
         width: 1200,
         height: 630,
-        alt: "WORDCC Logo",
+        alt: "Worship Ministry App",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "WORDCC | Worship Ministry App",
-    description: "WORDCC - Plan, share, and play your worship setlists with ease. Chord charts, team rosters, and more—all in one place for WORDCC Church.",
+    title: "Worship Ministry App",
+    description: "Plan, share, and coordinate your worship team. Chord charts, team rosters, setlists, and more — all in one place.",
     images: ["/og-wordcc.png"],
   },
 };
