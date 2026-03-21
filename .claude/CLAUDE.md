@@ -1,145 +1,106 @@
-# CLAUDE.md
+# CLAUDE.md — Worship Ministry Platform
 
-This file provides guidance for Claude when working inside this repository.
+This is the auto-loaded context file. It is read at the start of every session.
+Keep it concise — every line costs tokens on every request.
 
-The goal is to ensure that all AI-assisted development follows consistent architectural, engineering, and product standards.
-
----
-
-# Project Overview
-
-This repository contains the **Worship Ministry Platform**, a SaaS application designed to support church worship teams.
-
-The platform manages:
-
-- Worship team rostering
-- Music library management
-- Worship service planning
-- Asset tracking for church equipment
-- AI-assisted workflow automation
-
-The system is designed to support **multiple churches (multi-tenancy)** in the future while maintaining strict data isolation.
+For full project detail, architecture, and current known gaps: `.claude/context/PROJECT-CONTEXT.md`
+For hard engineering rules that must never be broken: `CLAUDE.md` (root)
 
 ---
 
-# Core Product Principles
+# What This Project Is
 
-The product prioritizes:
-
-1. **Simplicity for volunteers**
-2. **Operational reliability**
-3. **Clear workflows**
-4. **Low cognitive load**
-5. **Safe automation using AI agents**
-
-Users are often volunteers with limited technical experience.  
-The interface and workflows must remain **intuitive and easy to learn**.
+A multi-tenant SaaS platform for church worship ministry teams. Next.js 16 App Router, Supabase (PostgreSQL), TypeScript strict, Tailwind v4. Multi-tenancy is implemented and gated behind `MULTI_TENANT_ENABLED=true`. 705 tests (Vitest). See `.claude/context/PROJECT-CONTEXT.md` for full architecture.
 
 ---
 
-# Architecture Principles
+# Non-Negotiable Rules
 
-All system changes should follow these architectural principles:
+These are the most critical rules. Violating them has caused production regressions.
 
-### Simplicity First
-Prefer simple solutions over complex abstractions.
+1. **Never write `{/* ...existing code... */}` inside a `<form>` or modal body.** It makes all form state variables appear unused, triggers incorrect lint removals, and leaves the modal blank. Always write the real JSX.
 
-### Safe Evolution
-Avoid breaking existing functionality.  
-Design migrations carefully.
+2. **Before removing any symbol flagged as unused on a modal page, read the form body first.** If the form contains a placeholder comment, fix the form — do not remove the symbol. Run `npm run test:components` after any change to a modal page.
 
-### Tenant Isolation
-Future architecture must support strict tenant separation.
+3. **Every async button handler must follow try/catch/finally.** `setBusy(false)` goes in `finally`. All errors use `showToast()`. Never use `alert()` for outcomes. An uncaught throw in a handler causes a full dark-screen freeze in dev mode.
 
-### Configurability
-Avoid hard-coded rules when possible.  
-Use configuration to support future flexibility.
+4. **Never trust `members.app_role` for per-tenant role decisions.** In multi-tenant mode, always read from `organization_members.app_role` via `actor.tenantId` from `getActorFromRequest(req)`.
 
-### Observability
-Systems should be debuggable and transparent.
+5. **Every DB write on a tenant-scoped table must include `.eq("tenant_id", tenantId)`.** This includes DELETEs — an unscoped delete is an IDOR vulnerability.
+
+6. **Never default role to `"Admin"` when it is unknown.** Default to `null` and show a restricted UI. `null !== "Admin"` evaluates to `true` — that bug grants admin access silently.
+
+All detailed rules, anti-patterns, and code examples are in `CLAUDE.md` (root of repo).
 
 ---
 
-# Engineering Standards
+# Skills — When to Use Each
 
-Claude should prioritize:
+Skills live in `.claude/skills/`. Invoke knowledge skills by name: *"Use the staff-engineer skill."* Invoke action skills directly with `/skill-name`.
 
-- readable code
-- maintainable structure
-- clear naming
-- minimal complexity
-- separation of concerns
+**Knowledge skills** (load for context, guide Claude's reasoning):
 
-Avoid:
+| Skill | Use when |
+|---|---|
+| `staff-engineer` | Implementing features, reviewing code, architecture decisions, refactoring |
+| `saas-architect` | Designing new modules, tenant isolation strategy, schema design |
+| `SDET-quality-engineer` | Defining test coverage, reviewing edge cases, test strategy before implementation |
+| `systems-thinking` | Evaluating cross-system impact, identifying hidden coupling, scaling analysis |
+| `product-manager` | Defining feature scope, user stories, MVP vs future scope |
+| `ai-system-designer` | Designing AI agents, prompt pipelines, recommendation systems |
+| `ux-designer` | Page layout, user flows, low-cognitive-load interface decisions |
 
-- unnecessary abstractions
-- overly clever solutions
-- tightly coupled modules
+**Action skills** (invoke directly — run as forked sub-agents):
 
----
+| Skill | Use when |
+|---|---|
+| `/pr-impact-test` | PR raised or before merging — maps diff to targeted test suites, runs them, reports blast radius, and triggers audit agents if needed |
 
-# Testing Expectations
-
-All features should be testable.
-
-The system should include:
-
-- unit tests
-- integration tests
-- workflow validation
-- edge case coverage
-
-Particular attention should be given to:
-
-- roster generation logic
-- multi-tenant data safety
-- AI agent behavior
+Do not load multiple knowledge skills simultaneously unless the task genuinely spans them.
 
 ---
 
-# AI Agent Philosophy
+# Sub-Agents — When to Invoke Each
 
-The platform uses **AI agents to automate operational tasks**.
+Sub-agents live in `.claude/agents/`. They are autonomous workers for bounded, repetitive tasks. Invoke by name.
 
-Agents should be designed with:
-
-- clear responsibilities
-- predictable outputs
-- human oversight when necessary
-- safe fallback behavior
-
-Agents should **assist humans**, not replace oversight.
-
----
-
-# Skills System
-
-This repository uses a structured **Claude Skills system**.
-
-Skills represent specialized expert roles such as:
-
-- Product Manager
-- SaaS Architect
-- Staff Software Engineer
-- AI Systems Designer
-- SDET / Quality Engineer
-- UX Designer
-- Systems Thinking
-
-Claude should activate relevant skills depending on the task.
-
-Do not load unnecessary skills simultaneously.
+| Agent | Invoke when |
+|---|---|
+| `debugger` | Something is broken in manual testing — blank modal, dark screen, 401/500 error, wrong data, auth loop, build error. Traces browser symptom → root cause → applies fix → runs tests |
+| `tenant-security-auditor` | New API route added, before enabling `MULTI_TENANT_ENABLED=true`, after any change to `src/app/api/` or `src/lib/db/` |
+| `modal-regression-guard` | Lint error on a modal page, before running `test:components`, any time `isSaving`/`saveError`/`toggleRole`/`ROLES` is flagged unused |
+| `migration-safety-reviewer` | New `.sql` file created in `supabase/migrations/`, before applying any migration to staging or production |
+| `async-handler-auditor` | New async handler written in an admin page, dark screen reported, reviewing admin page UI reliability |
 
 ---
 
-# Development Workflow
+# Prompts — Planning Pipeline
 
-When implementing a feature, Claude should follow this planning sequence:
+Prompts live in `.claude/prompts/`. Use them for structured planning.
 
-1. Feature Definition
-2. Architecture Design
-3. Implementation Plan
-4. Testing Strategy
-5. Release Safety Review
+| Prompt | Use when |
+|---|---|
+| `00_feature-planning-pipeline.md` | Starting a major new feature (runs all 6 phases: definition → architecture → implementation → testing → release → critical review) |
+| `architecture-design-review.md` | Reviewing a specific design decision in isolation |
+| `01–05` individual phases | When you only need one phase of the pipeline |
 
-These prompts exist in:
+Example invocation:
+```
+Use feature-planning-pipeline.md
+
+Topic: Add equipment asset tracking module with per-tenant inventory
+```
+
+---
+
+# Development Commands
+
+```bash
+npm run dev               # Dev server (NODE_ENV=development, dev_auth bypass available)
+npm run dev:real-auth     # Dev server with production auth (no bypass)
+npm run build             # Production build
+npm run lint              # ESLint
+npm run test              # All tests (vitest run)
+npm run test:components   # Component tests only — run after ANY change to a modal page
+npm run test:watch        # Watch mode
+```

@@ -19,6 +19,7 @@ const ITEMS_PER_PAGE = 10;
 
 function SongPoolPageInner() {
   const searchParams = useSearchParams();
+  const orgSlug = searchParams.get("org");
   const [search, setSearch] = useState(() => searchParams.get("q") ?? "");
   const [statusFilter, setStatusFilter] = useState<SongStatus | "all">("all");
   const [categoryFilter, setCategoryFilter] = useState<SongCategory | "all">("all");
@@ -30,7 +31,7 @@ function SongPoolPageInner() {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch('/api/songs?scope=portal');
+        const res = await fetch(`/api/songs?scope=portal${orgSlug ? `&org=${encodeURIComponent(orgSlug)}` : ""}`);
         if (!res.ok) throw new Error('Failed to fetch songs');
         const data: unknown = await res.json();
         if (!cancelled && Array.isArray(data)) setSongs(data as SongWithCharts[]);

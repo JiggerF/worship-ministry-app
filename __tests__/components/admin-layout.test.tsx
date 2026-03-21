@@ -152,6 +152,62 @@ describe("AdminLayout — loading state", () => {
   });
 });
 
+describe("AdminLayout — feature flag filtering", () => {
+  it("shows all items when features array is absent (backward compat / single-tenant)", async () => {
+    // Response with no features field — same as current single-tenant prod
+    setupMember("Admin");
+    renderLayout();
+    const nav = await screen.findByTestId("sidebar-nav");
+    expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /song manager/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+  });
+
+  it("hides feature-gated items when that feature is not in features[]", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "member-1",
+          name: "Test User",
+          app_role: "Admin",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          tenant_name: "Test Church",
+          // handbook and setlist are NOT in the features list
+          features: ["roster", "songs", "availability", "audit_log"],
+        }),
+      })
+    );
+    renderLayout();
+    const nav = await screen.findByTestId("sidebar-nav");
+    expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(nav).queryByRole("link", { name: /team handbook/i })).not.toBeInTheDocument();
+      expect(within(nav).queryByRole("link", { name: /setlist/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("shows the tenant name from /api/me in the sidebar header", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "member-1",
+          name: "Test User",
+          app_role: "Admin",
+          tenant_id: "00000000-0000-0000-0000-000000000001",
+          tenant_name: "Grace Community Church",
+          features: ["roster", "songs"],
+        }),
+      })
+    );
+    renderLayout();
+    expect(await screen.findByText("Grace Community Church")).toBeInTheDocument();
+  });
+});
+
 describe("AdminLayout — login page", () => {
   it("does not render the sidebar on /admin/login", () => {
     vi.mocked(usePathname).mockReturnValue("/admin/login");

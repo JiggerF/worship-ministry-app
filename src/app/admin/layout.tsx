@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { Member } from "@/lib/types/database";
+import type { MeResponse } from "@/lib/types/database";
 
 function useCurrentMember() {
-  const [member, setMember] = useState<Member | null>(null);
+  const [member, setMember] = useState<MeResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const pathname = usePathname();
   useEffect(() => {
@@ -34,16 +34,24 @@ function useCurrentMember() {
   return { member, loading };
 }
 
-const SIDEBAR_ITEMS = [
-  { href: "/admin/roster", label: "Roster Manager", icon: "📋" },
-  { href: "/admin/availability", label: "Availability", icon: "📅" },
-  { href: "/admin/setlist", label: "Setlist", icon: "🎶" },
-  { href: "/admin/songs", label: "Song Manager", icon: "🎵" },
+interface SidebarItem {
+  href: string;
+  label: string;
+  icon: string;
+  /** Feature flag key. If undefined, the item is always visible (not feature-gated). */
+  feature?: string;
+}
+
+const SIDEBAR_ITEMS: SidebarItem[] = [
+  { href: "/admin/roster", label: "Roster Manager", icon: "📋", feature: "roster" },
+  { href: "/admin/availability", label: "Availability", icon: "📅", feature: "availability" },
+  { href: "/admin/setlist", label: "Setlist", icon: "🎶", feature: "setlist" },
+  { href: "/admin/songs", label: "Song Manager", icon: "🎵", feature: "songs" },
   { href: "/admin/people", label: "People", icon: "👥" },
-  { href: "/admin/handbook", label: "Team Handbook", icon: "📖" },
+  { href: "/admin/handbook", label: "Team Handbook", icon: "📖", feature: "handbook" },
   { href: "/admin/help", label: "Help", icon: "❓" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
-  { href: "/admin/audit", label: "Audit Log", icon: "🔍" },
+  { href: "/admin/audit", label: "Audit Log", icon: "🔍", feature: "audit_log" },
 ];
 
 // Pages hidden for Coordinator, WorshipLeader, and MusicCoordinator
@@ -65,9 +73,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // confirmed as non-restricted. While loading or on fetch failure, default to
   // hiding them — never flash privileged links to restricted users.
   const showAll = !memberLoading && member !== null && !RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number]);
-  const filteredSidebar = showAll
-    ? SIDEBAR_ITEMS
-    : SIDEBAR_ITEMS.filter((item) => !RESTRICTED_NAV_HIDDEN.includes(item.href));
+
+  // Feature flag filtering: if features[] is absent (single-tenant / not loaded),
+  // default to showing all items. This preserves backward compatibility with tests
+  // and single-tenant deployments.
+  const enabledFeatures = member?.features ?? null;
+  const isFeatureVisible = (feature?: string) => {
+    if (!feature) return true;           // no feature key → always visible
+    if (!enabledFeatures) return true;   // features not yet resolved → show all
+    return enabledFeatures.includes(feature);
+  };
+
+  const filteredSidebar = SIDEBAR_ITEMS.filter((item) => {
+    // 1. Feature-flag gate
+    if (!isFeatureVisible(item.feature)) return false;
+    // 2. Role-based gate (Settings / Audit Log hidden for restricted roles)
+    if (!showAll && RESTRICTED_NAV_HIDDEN.includes(item.href)) return false;
+    return true;
+  });
 
   async function handleSignOut() {
     try {
@@ -79,12 +102,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     router.refresh();
   }
 
+  // Display the tenant name from /api/me if available, otherwise fall back to
+  // the static label (backward compat in single-tenant mode).
+  const tenantName = member?.tenant_name ?? "Worship Ministry";
+
   return (
     <div className="min-h-screen bg-gray-50 flex">
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-base font-bold text-gray-900">Worship Ministry</h1>
+          <h1 className="text-base font-bold text-gray-900">{tenantName}</h1>
           <p className="text-xs text-gray-500 mt-0.5">Ministry Admin</p>
         </div>
 

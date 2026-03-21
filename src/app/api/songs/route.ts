@@ -15,7 +15,7 @@ const supabase = createClient(supabaseUrl, serviceKey);
 export async function GET(req: NextRequest) {
   // ?scope=portal hides internal_approved songs from the member-facing portal
   const scope = req.nextUrl.searchParams.get("scope");
-  const tenantId = getTenantId(req);
+const tenantId = getTenantId(req);
 
   let query = supabase
     .from("songs")

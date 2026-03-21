@@ -25,18 +25,10 @@ const {
   mockGetActor,
   mockCreateAuditLogEntry,
   mockSignInWithPassword,
-  mockQuery,
   mockFrom,
   mockClient,
 } = vi.hoisted(() => {
-  const query: Record<string, unknown> = {};
-  const methods = ["select", "eq", "single"] as const;
-  methods.forEach((m) => {
-    query[m] = vi.fn().mockReturnValue(query);
-  });
-  query.then = vi.fn();
-  const from = vi.fn().mockReturnValue(query);
-
+  const from = vi.fn();
   const mockSignIn = vi.fn();
   const mockAuth = { signInWithPassword: mockSignIn };
 
@@ -44,7 +36,6 @@ const {
     mockGetActor: vi.fn(),
     mockCreateAuditLogEntry: vi.fn(),
     mockSignInWithPassword: mockSignIn,
-    mockQuery: query,
     mockFrom: from,
     mockClient: { from, auth: mockAuth },
   };
@@ -78,25 +69,51 @@ const MOCK_SESSION = {
   refresh_token: "refresh-token-xyz",
 };
 
-/** Resolves the supabase query chain (member lookup) with given data/error */
-function resolveWith(data: unknown, error: unknown = null) {
-  (mockQuery.then as ReturnType<typeof vi.fn>).mockImplementation(
-    (resolve: (v: unknown) => unknown) =>
-      Promise.resolve({ data, error }).then(resolve)
-  );
+const WCC_ORG_ID = "00000000-0000-0000-0000-000000000001";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Build a fresh thenable Supabase query chain that resolves once with `data`. */
+function makeChain(data: unknown) {
+  const c: Record<string, unknown> = {};
+  const methods = ["select", "eq", "single", "maybeSingle", "limit"] as const;
+  methods.forEach((m) => { c[m] = vi.fn().mockReturnValue(c); });
+  // Plain function (not vi.fn) to avoid spy wrapper interfering with the
+  // Promise/A+ thenable protocol that JavaScript's `await` relies on.
+  c.then = (resolve: (v: unknown) => unknown, _reject?: unknown) =>
+    Promise.resolve({ data, error: null }).then(resolve);
+  return c;
+}
+
+/**
+ * Configures mockFrom so the login handler receives the right data per query.
+ *
+ * makeNextRequest always injects x-tenant-id (= WCC_ORG_ID), so the login
+ * route always takes the x-tenant-id path. It makes these sequential from() calls:
+ *   Q1 from("members")              — member lookup (multi-tenant validation)
+ *   Q2 from("organization_members") — org membership check (maybeSingle → { is_active: true })
+ *   Q3 from("members")              — member re-fetch for audit log
+ *
+ * Pass `memberData=null` to simulate a member-not-found scenario (Q2/Q3 not reached).
+ * Pass `orgMember=null` to simulate "not a member of this org" (403 from login).
+ */
+function setupLoginQueries(
+  memberData: unknown | null,
+  orgMember: unknown | null = { is_active: true }
+) {
+  let fromCallCount = 0;
+  mockFrom.mockImplementation(() => {
+    fromCallCount++;
+    if (fromCallCount === 1) return makeChain(memberData);    // Q1: member lookup
+    if (fromCallCount === 2) return makeChain(orgMember);     // Q2: org membership check
+    return makeChain(memberData);                             // Q3+: audit re-fetch
+  });
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-
-  // Reset query chain
-  const methods = ["select", "eq", "single"] as const;
-  methods.forEach((m) => {
-    (mockQuery[m] as ReturnType<typeof vi.fn>) = vi
-      .fn()
-      .mockReturnValue(mockQuery);
-  });
-  mockFrom.mockReturnValue(mockQuery);
 
   // Default: successful Supabase sign-in
   mockSignInWithPassword.mockResolvedValue({
@@ -104,8 +121,8 @@ beforeEach(() => {
     error: null,
   });
 
-  // Default: member lookup returns Admin
-  resolveWith({ id: ADMIN_ACTOR.id, name: ADMIN_ACTOR.name, app_role: "Admin" });
+  // Default: Admin member with WCC org membership
+  setupLoginQueries({ id: ADMIN_ACTOR.id, name: ADMIN_ACTOR.name, app_role: "Admin" });
 
   // Default: getActorFromRequest returns Admin
   mockGetActor.mockResolvedValue(ADMIN_ACTOR);
@@ -238,7 +255,7 @@ describe("POST /api/auth/login — success", () => {
   });
 
   it("calls createAuditLogEntry with action:login for Admin role", async () => {
-    resolveWith({ id: "member-uuid-1", name: "Test Admin", app_role: "Admin" });
+    setupLoginQueries({ id: ADMIN_ACTOR.id, name: ADMIN_ACTOR.name, app_role: "Admin" });
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/auth/login",
@@ -256,7 +273,7 @@ describe("POST /api/auth/login — success", () => {
   });
 
   it("calls createAuditLogEntry with action:login for Coordinator role", async () => {
-    resolveWith({ id: COORD_ACTOR.id, name: COORD_ACTOR.name, app_role: "Coordinator" });
+    setupLoginQueries({ id: COORD_ACTOR.id, name: COORD_ACTOR.name, app_role: "Coordinator" });
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/auth/login",
@@ -274,7 +291,7 @@ describe("POST /api/auth/login — success", () => {
   });
 
   it("calls createAuditLogEntry with action:login for Musician role", async () => {
-    resolveWith({ id: MUSICIAN_ACTOR.id, name: MUSICIAN_ACTOR.name, app_role: "Musician" });
+    setupLoginQueries({ id: MUSICIAN_ACTOR.id, name: MUSICIAN_ACTOR.name, app_role: "Musician" });
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/auth/login",
@@ -290,7 +307,7 @@ describe("POST /api/auth/login — success", () => {
   });
 
   it("audit summary includes actor name and role", async () => {
-    resolveWith({ id: ADMIN_ACTOR.id, name: "Test Admin", app_role: "Admin" });
+    setupLoginQueries({ id: ADMIN_ACTOR.id, name: "Test Admin", app_role: "Admin" });
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/auth/login",
@@ -303,7 +320,8 @@ describe("POST /api/auth/login — success", () => {
   });
 
   it("still returns 200 even when member lookup fails (no audit written)", async () => {
-    resolveWith(null, { message: "no rows" });
+    // Member not found → no org check, no audit
+    setupLoginQueries(null);
     const req = makeNextRequest({
       method: "POST",
       url: "http://localhost/api/auth/login",

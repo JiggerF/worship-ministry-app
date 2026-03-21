@@ -64,7 +64,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const tenantId = getTenantId(req);
+  // getTenantId throws when MULTI_TENANT_ENABLED=true and x-tenant-id is absent
+  // (indicates middleware misconfiguration). Keep it inside the try so the route
+  // returns a clean 500 rather than an unhandled rejection.
+  let tenantId: string;
+  try {
+    tenantId = getTenantId(req);
+  } catch (e: unknown) {
+    const err = e as { message?: string };
+    return NextResponse.json({ error: err?.message ?? "Tenant resolution failed" }, { status: 500 });
+  }
 
   try {
     const member = await getMemberByEmail(email);
@@ -72,7 +81,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Member not found" }, { status: 404 });
     }
 
-    // In multi-tenant mode, resolve the per-tenant app_role from organization_members
+    // In multi-tenant mode, resolve the per-tenant app_role from organization_members.
+    // If the user is NOT a member of the resolved tenant, return 403 immediately —
+    // this is the API-layer tenant boundary enforcement that prevents cross-tenant
+    // data leakage even if middleware were somehow bypassed.
     let appRole = member.app_role;
     if (isMultiTenantEnabled()) {
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -81,13 +93,18 @@ export async function GET(req: NextRequest) {
         const serviceClient = createClient(supabaseUrl, serviceKey);
         const { data: orgMember } = await serviceClient
           .from("organization_members")
-          .select("app_role")
+          .select("app_role, is_active")
           .eq("member_id", member.id)
           .eq("organization_id", tenantId)
-          .single();
-        if (orgMember?.app_role) {
-          appRole = orgMember.app_role;
+          .maybeSingle();
+        if (!orgMember || orgMember.is_active === false) {
+          // User is authenticated but does not belong to this organisation.
+          return NextResponse.json(
+            { error: "Not a member of this organisation" },
+            { status: 403 }
+          );
         }
+        appRole = orgMember.app_role;
       }
     }
 

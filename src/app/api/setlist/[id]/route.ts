@@ -27,7 +27,7 @@ export async function DELETE(
   }
 
   try {
-    await deleteSetlistSong(id);
+    await deleteSetlistSong(id, actor.tenantId);
 
     try {
       await createAuditLogEntry({

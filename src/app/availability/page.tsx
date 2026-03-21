@@ -46,22 +46,13 @@ function toISODate(date: Date): string {
 
 export default function AvailabilityPage() {
   const { member: currentUser, loading: memberLoading } = useCurrentMember();
-  // Hide page for Worship Lead and Music Coordinator
-  if (!memberLoading && currentUser && ["WorshipLeader", "MusicCoordinator"].includes(currentUser.app_role)) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <div className="max-w-md w-full bg-white rounded-xl border border-gray-200 p-6 text-center">
-          <div className="text-3xl mb-3">⚠️</div>
-          <p className="text-sm text-gray-700">Availability tracking is managed by your Coordinator.</p>
-        </div>
-      </div>
-    );
-  }
+
   const token = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
   const periodId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("period") : null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState<string | null>(null);
 
   const [member, setMember] = useState<{ id: string; name: string } | null>(
     null
@@ -146,6 +137,7 @@ export default function AvailabilityPage() {
         setIsLockedOut(json.lockout?.locked ?? false);
         if (json.periodLabel) setPeriodLabel(json.periodLabel);
         if (json.sundays) setApiSundays(json.sundays);
+        if (json.orgName) setOrgName(json.orgName);
 
         // Member-scoped roles from API
         setMemberRoles(json.roles ?? []);
@@ -187,6 +179,18 @@ export default function AvailabilityPage() {
 
     load();
   }, [token, targetMonth, sundays, periodId]);
+
+  // Hide page for Worship Lead and Music Coordinator
+  if (!memberLoading && currentUser && ["WorshipLeader", "MusicCoordinator"].includes(currentUser.app_role)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="max-w-md w-full bg-white rounded-xl border border-gray-200 p-6 text-center">
+          <div className="text-3xl mb-3">⚠️</div>
+          <p className="text-sm text-gray-700">Availability tracking is managed by your Coordinator.</p>
+        </div>
+      </div>
+    );
+  }
 
   function toggleDate(dateIso: string) {
     setSelectedDates((prev) => {
@@ -262,7 +266,7 @@ export default function AvailabilityPage() {
         <div className="max-w-md w-full bg-white rounded-xl border border-gray-200 p-8 text-center">
           <div className="text-4xl mb-4">📅</div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">
-            WCC Worship Team Availability
+            {orgName ?? "Worship Team Availability"}
           </h1>
           <p className="text-sm text-gray-500 mb-6">
             No more edits allowed since schedule is already being finalised!
@@ -306,7 +310,7 @@ export default function AvailabilityPage() {
         <div className="text-center mb-6">
           <div className="text-4xl mb-2">📅</div>
           <h1 className="text-xl font-bold text-gray-900">
-            WCC Worship Team Availability
+            {orgName ?? "Worship Team Availability"}
           </h1>
           <p className="text-sm text-gray-500 mt-1">{periodLabel ?? targetMonthLabel}</p>
         </div>

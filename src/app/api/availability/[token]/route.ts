@@ -110,11 +110,17 @@ function isLocked(targetYear: number, targetMonth: number) {
   };
 }
 
-async function getMemberRoles(memberId: string) {
+/**
+ * Look up the musical roles assigned to a member, scoped to a specific tenant.
+ * Without the tenant filter this would return roles from all tenants the member
+ * belongs to, leaking cross-tenant role assignments.
+ */
+async function getMemberRoles(memberId: string, tenantId: string) {
   const { data: memberRoles, error: mrError } = await supabase
     .from("member_role_assignments")
     .select("role_id")
-    .eq("member_id", memberId);
+    .eq("member_id", memberId)
+    .eq("tenant_id", tenantId);
 
   if (mrError) throw mrError;
 
@@ -130,6 +136,21 @@ async function getMemberRoles(memberId: string) {
   if (rolesError) throw rolesError;
 
   return roles ?? [];
+}
+
+/**
+ * Resolve the active tenant for a member from organization_members.
+ * Returns null if the member has no active org membership.
+ */
+async function resolveMemberTenant(memberId: string): Promise<string | null> {
+  const { data: orgRows } = await supabase
+    .from("organization_members")
+    .select("organization_id")
+    .eq("member_id", memberId)
+    .eq("is_active", true)
+    .limit(1);
+
+  return (orgRows as { organization_id: string }[] | null)?.[0]?.organization_id ?? null;
 }
 
 /* ----------------------------- */
@@ -161,11 +182,32 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
   }
 
+  // Resolve the member's active tenant to scope all subsequent queries.
+  // This prevents cross-tenant role leaks and ensures availability data is
+  // read from the correct org context.
+  const tenantId = await resolveMemberTenant(member.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Member has no active organisation" }, { status: 403 });
+  }
+
   let roles: { id: number; name: string }[] = [];
   try {
-    roles = await getMemberRoles(member.id);
+    roles = await getMemberRoles(member.id, tenantId);
   } catch {
     return NextResponse.json({ error: "Failed to load member roles" }, { status: 500 });
+  }
+
+  // Resolve tenant display name for the client
+  let orgName: string | null = null;
+  try {
+    const { data: org } = await supabase
+      .from("organizations")
+      .select("name")
+      .eq("id", tenantId)
+      .maybeSingle();
+    orgName = org?.name ?? null;
+  } catch {
+    // non-critical — fallback to null
   }
 
   /* ── Period-based mode ── */
@@ -174,6 +216,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       .from("availability_periods")
       .select("*")
       .eq("id", periodId)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (periodError || !period) {
@@ -224,6 +267,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       preferredRoleId,
       roles,
       lockout,
+      orgName,
     });
   }
 
@@ -264,6 +308,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     .from("availability")
     .select("date, status, preferred_role, notes")
     .eq("member_id", member.id)
+    .eq("tenant_id", tenantId)
     .in("date", sundays);
 
   if (error) {
@@ -279,6 +324,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     availability: availability ?? [],
     roles,
     lockout,
+    orgName,
   });
 }
 
@@ -300,6 +346,12 @@ export async function POST(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "Invalid token" }, { status: 404 });
   }
 
+  // Resolve tenant for scoping all writes
+  const tenantId = await resolveMemberTenant(member.id);
+  if (!tenantId) {
+    return NextResponse.json({ error: "Member has no active organisation" }, { status: 403 });
+  }
+
   const body = await req.json().catch(() => null);
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
@@ -311,6 +363,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
       .from("availability_periods")
       .select("*")
       .eq("id", periodId)
+      .eq("tenant_id", tenantId)
       .single();
 
     if (periodError || !period) {
@@ -441,6 +494,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
   }
 
   const payload = sundays.map((date) => ({
+    tenant_id: tenantId,
     member_id: member.id,
     date,
     status: (availableDates.has(date)
@@ -452,7 +506,7 @@ export async function POST(req: NextRequest, context: RouteContext) {
 
   const { error } = await supabase
     .from("availability")
-    .upsert(payload, { onConflict: "member_id,date" });
+    .upsert(payload, { onConflict: "tenant_id,member_id,date" });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -200,6 +200,28 @@ export interface HandbookDocument {
 }
 
 // ─────────────────────────────────────────────
+// /api/me RESPONSE TYPE
+// ─────────────────────────────────────────────
+
+/**
+ * Shape returned by GET /api/me.
+ * Extends Member with multi-tenant fields added by the route handler.
+ * Use this type wherever the full /api/me response is consumed (layouts, hooks).
+ *
+ * app_role here is authoritative — the route resolves it from organization_members
+ * for the current tenant before returning, so the @deprecated warning on Member.app_role
+ * does not apply.
+ */
+export interface MeResponse extends Omit<Member, "app_role"> {
+  /** Per-tenant authoritative role resolved by /api/me from organization_members. */
+  app_role: AppRole;
+  tenant_id: string;
+  tenant_name: string | null;
+  /** Enabled feature flag keys for the current tenant. Undefined in single-tenant mode. */
+  features?: string[];
+}
+
+// ─────────────────────────────────────────────
 // JOINED / DERIVED TYPES
 // ─────────────────────────────────────────────
 

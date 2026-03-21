@@ -86,6 +86,7 @@ export default function AdminSongsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (IS_MOCK) return;
@@ -93,12 +94,17 @@ export default function AdminSongsPage() {
     async function load() {
       try {
         const res = await fetch('/api/songs');
-        if (!res.ok) throw new Error('Failed to fetch songs');
+        if (!res.ok) {
+          let msg = `Failed to load songs (${res.status})`;
+          try { const j = await res.json(); msg = j.error ?? msg; } catch { /* ignore */ }
+          if (!cancelled) setLoadError(msg);
+          return;
+        }
         const data: unknown = await res.json();
         if (!cancelled && Array.isArray(data)) setSongs(data as SongWithCharts[]);
       } catch (err) {
-        console.warn('Could not load /api/songs, keeping local state.', err);
-        if (process.env.NODE_ENV === 'development') setSongs(MOCK_SONGS);
+        console.error('Could not load /api/songs:', err);
+        if (!cancelled) setLoadError('Network error — could not load songs.');
       }
     }
     load();
@@ -266,6 +272,17 @@ export default function AdminSongsPage() {
     } finally {
       setIsDeleting(false);
     }
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-6 py-4 text-sm text-red-700 max-w-md text-center">
+          <p className="font-medium mb-1">Could not load songs</p>
+          <p className="text-red-600">{loadError}</p>
+        </div>
+      </div>
+    );
   }
 
   return (

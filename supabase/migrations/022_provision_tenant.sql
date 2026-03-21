@@ -32,11 +32,10 @@ BEGIN
 
   -- 2. Create or find member (global identity)
   --    If the email already exists (multi-org member), update the name but keep
-  --    the existing member row. members.app_role is set to 'Musician' for new
-  --    members — the authoritative role lives in organization_members.
+  --    the existing member row. For the founding admin, set app_role to 'Admin'.
   INSERT INTO public.members (email, name, app_role, magic_token)
-  VALUES (p_admin_email, p_admin_name, 'Musician', gen_random_uuid())
-  ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
+  VALUES (p_admin_email, p_admin_name, 'Admin', gen_random_uuid())
+  ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, app_role = 'Admin'
   RETURNING id INTO v_member_id;
 
   -- 3. Create organization membership (Admin role for the founding admin)
