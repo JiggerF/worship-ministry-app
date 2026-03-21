@@ -66,50 +66,7 @@ export default function AboutPage() {
           </span>
         </div>
         <p className="text-sm text-gray-500">{APP_INFO.name} · {APP_INFO.releaseDate}</p>
-      </div>
-
-      {/* ── Author card ───────────────────────────────────────────────────── */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">
-              Created by
-            </p>
-            <h2 className="text-lg font-bold text-gray-900">{APP_INFO.author.name}</h2>
-            <p className="text-sm text-gray-500 mt-0.5">{APP_INFO.author.role}</p>
-            <p className="text-sm text-gray-600 mt-3 leading-relaxed max-w-lg">
-              {APP_INFO.author.note}
-            </p>
-          </div>
-          <div className="flex-shrink-0">
-            <div className="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center text-white text-lg font-bold select-none">
-              JF
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-5 pt-5 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
-          <a
-            href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Feedback`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-medium hover:bg-gray-800 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            Send Feedback
-          </a>
-          <a
-            href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Bug Report`}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            Report a Bug
-          </a>
-        </div>
+        <p className="text-xs text-gray-400 mt-1">Created by {APP_INFO.author.name}</p>
       </div>
 
       {/* ── Module status ─────────────────────────────────────────────────── */}
@@ -160,9 +117,14 @@ export default function AboutPage() {
       </div>
 
       {/* ── Footer ────────────────────────────────────────────────────────── */}
-      <p className="text-center text-xs text-gray-400">
-        © {buildYear} {APP_INFO.author.name} · {APP_INFO.license}
-      </p>
+      <div className="text-center text-xs text-gray-400 space-y-1.5">
+        <p>© {buildYear} {APP_INFO.author.name} · {APP_INFO.license}</p>
+        <div className="flex items-center justify-center gap-3">
+          <a href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Feedback`} className="hover:text-gray-600 transition-colors">Send Feedback</a>
+          <span>·</span>
+          <a href={`mailto:${APP_INFO.author.email}?subject=Worship Ministry App — Bug Report`} className="hover:text-gray-600 transition-colors">Report a Bug</a>
+        </div>
+      </div>
     </div>
   );
 }
