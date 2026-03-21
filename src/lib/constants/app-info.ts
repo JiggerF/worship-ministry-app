@@ -1,12 +1,14 @@
 /**
  * Static application metadata — displayed on the About page.
- * Keep this file in sync with package.json and the deployed feature set.
+ * version is sourced from package.json — run `npm version patch/minor/major` to increment it.
  */
+
+import { version } from "../../../package.json";
 
 export const APP_INFO = {
   name: "Worship Ministry App",
-  version: "1.0.2",
-  releaseDate: "February 2026",
+  version,
+  releaseDate: "2026",
   author: {
     name: "Jigger Fantonial",
     email: "jiggerfantonial@yahoo.com",
