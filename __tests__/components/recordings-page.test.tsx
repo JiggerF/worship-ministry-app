@@ -132,4 +132,105 @@ describe("AdminRecordingsPage", () => {
       expect(screen.getByText(/no recordings yet/i)).toBeInTheDocument();
     });
   });
+
+  // ─── Search / filter tests ────────────────────────────────────────────────
+
+  it("renders search input when recordings are present", async () => {
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+    expect(screen.getByRole("searchbox", { name: /search recordings/i })).toBeInTheDocument();
+  });
+
+  it("does NOT render search input when there are no recordings", async () => {
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, []));
+    render(<AdminRecordingsPage />);
+    await screen.findByText(/no recordings yet/i);
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
+  });
+
+  it("filters by exact title substring (case-insensitive)", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "live mix");
+    expect(screen.getByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  it("filters by short date form — '15 Mar' matches 2026-03-15", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "15 mar");
+    expect(screen.getByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  it("filters by long date form — 'March 2026' matches 2026-03-15", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "march 2026");
+    expect(screen.getByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  it("filters by ISO date fragment — '2026-03' matches 2026-03-15", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "2026-03");
+    expect(screen.getByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  it("filters by featured member name", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "tess cruz");
+    expect(screen.getByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  it("shows 'no recordings found' message when search has no matches", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "zzznomatch");
+    await waitFor(() => {
+      expect(screen.queryByText("Sunday Morning Service - Live Mix")).not.toBeInTheDocument();
+      expect(screen.getByText(/no recordings found/i)).toBeInTheDocument();
+    });
+  });
+
+  it("clears search and shows all recordings again", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+
+    const input = screen.getByRole("searchbox", { name: /search recordings/i });
+    await user.type(input, "zzznomatch");
+    await waitFor(() => {
+      expect(screen.queryByText("Sunday Morning Service - Live Mix")).not.toBeInTheDocument();
+    });
+
+    await user.clear(input);
+    expect(await screen.findByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
 });

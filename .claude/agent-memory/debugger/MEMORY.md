@@ -55,7 +55,7 @@ sees "You do not have platform admin access." when trying to log in or access ad
 **Root cause (two parts):**
 
 Part A — Subdomain slug mismatch: `resolveTenantId()` extracts the first subdomain segment
-from the production hostname (e.g. `worship` from `worship.gracetoyou.com.au`) and queries
+from the production hostname (e.g. `worship` from `worship.example.org`) and queries
 `organizations WHERE slug = 'worship'`. The WCC organization was seeded with `slug = 'wcc'`,
 so the lookup returns no rows. Previously `resolveTenantId()` returned `null` immediately when
 the slug lookup failed — skipping the `sb-tenant-id` cookie fallback. With `MULTI_TENANT_ENABLED=true`,
@@ -176,7 +176,7 @@ If behavior is wrong in dev, force recompile: `rm -rf .next && npm run dev`.
 
 ### FAILURE CLASS 12 — Portal/Admin Layout Shows Hardcoded WCC Label for Other Tenants
 
-**Symptom:** `cfc.gracetoyou.com.au/portal/roster` shows "WORDCC Worship Team" instead of "CFC Worship Ministry".
+**Symptom:** `cfc.example.org/portal/roster` shows "WORDCC Worship Team" instead of "CFC Worship Ministry".
 
 **Root cause:** `src/app/portal/layout.tsx` is a `"use client"` component with a hardcoded string
 literal on line 23: `<h1>WORDCC Worship Team</h1>`. Because it is a client component it cannot call

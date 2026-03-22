@@ -18,6 +18,51 @@ function monthKey(isoDate: string) {
   return isoDate.slice(0, 7); // "YYYY-MM"
 }
 
+/**
+ * Produces every human-readable date representation for an ISO date string
+ * so that partial natural-language queries ("22 Mar", "March 22", "March 2026",
+ * "2026-03-22") all resolve to the same recording.
+ */
+function getDateVariants(isoDate: string): string[] {
+  const d = new Date(isoDate + "T00:00:00");
+  return [
+    isoDate,                                                                                          // "2026-03-22"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),               // "22 March 2026"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long" }),                                // "22 March"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),              // "22 Mar 2026"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short" }),                               // "22 Mar"
+    d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),                               // "March 2026"
+    d.toLocaleDateString("en-AU", { month: "short", year: "numeric" }),                              // "Mar 2026"
+    d.toLocaleDateString("en-AU", { year: "numeric" }),                                              // "2026"
+    d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),               // "March 22, 2026"
+    d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }),              // "Mar 22, 2026"
+    d.toLocaleDateString("en-US", { day: "numeric", month: "long" }),                                // "March 22"
+    String(d.getDate()),                                                                              // "22"
+    String(d.getFullYear()),                                                                          // "2026"
+  ].map((s) => s.toLowerCase());
+}
+
+/**
+ * Returns true when the recording matches the trimmed, lower-cased query.
+ *
+ * Matching strategy (all OR — first hit wins):
+ *   1. Query is a substring of the title (case-insensitive).
+ *   2. Query is a substring of any date variant for sunday_date.
+ *   3. Query is a substring of any featured member's full name (case-insensitive).
+ */
+function matchesSearch(recording: SundayRecordingWithTeam, query: string): boolean {
+  if (!query.trim()) return true;
+  const q = query.trim().toLowerCase();
+
+  if (recording.title.toLowerCase().includes(q)) return true;
+
+  if (getDateVariants(recording.sunday_date).some((v) => v.includes(q))) return true;
+
+  if (recording.featured_members.some((m) => m.name.toLowerCase().includes(q))) return true;
+
+  return false;
+}
+
 export default function PortalTrackPage() {
   const [recordings, setRecordings] = useState<SundayRecordingWithTeam[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,13 +94,7 @@ export default function PortalTrackPage() {
   }, []);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return recordings;
-    return recordings.filter((r) =>
-      r.title.toLowerCase().includes(q) ||
-      r.sunday_date.includes(q) ||
-      r.featured_members.some((m) => m.name.toLowerCase().includes(q))
-    );
+    return recordings.filter((r) => matchesSearch(r, search));
   }, [recordings, search]);
 
   // Group by month (newest first, already sorted by API)

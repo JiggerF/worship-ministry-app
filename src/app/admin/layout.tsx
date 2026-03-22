@@ -148,7 +148,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {[
             { href: "/portal/roster", label: "Roster", icon: "📋" },
             { href: "/portal/songs", label: "Song Library", icon: "🎵" },
-            { href: "/portal/track", label: "Recordings", icon: "🎙️" },
+            { href: "/portal/recordings", label: "Recordings", icon: "🎙️" },
           ].map(({ href, label, icon }) => (
             <a
               key={href}

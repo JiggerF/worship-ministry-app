@@ -23,6 +23,50 @@ function formatDate(iso: string) {
   return d.toLocaleDateString("en-AU", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * Produces every human-readable date representation for an ISO date string
+ * so that partial natural-language queries ("22 Mar", "March 2026", "2026-03-22")
+ * all resolve to the same recording.
+ */
+function getDateVariants(isoDate: string): string[] {
+  const d = new Date(isoDate + "T00:00:00");
+  return [
+    isoDate,                                                                                                       // "2026-03-22"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),                            // "22 March 2026"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long" }),                                             // "22 March"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),                           // "22 Mar 2026"
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short" }),                                            // "22 Mar"
+    d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),                                            // "March 2026"
+    d.toLocaleDateString("en-AU", { month: "short", year: "numeric" }),                                           // "Mar 2026"
+    d.toLocaleDateString("en-AU", { year: "numeric" }),                                                           // "2026"
+    d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),                            // "March 22, 2026"
+    d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }),                           // "Mar 22, 2026"
+    String(d.getDate()),                                                                                           // "22"
+    String(d.getFullYear()),                                                                                       // "2026"
+  ].map((s) => s.toLowerCase());
+}
+
+/**
+ * Returns true when the recording matches the trimmed, lower-cased query.
+ *
+ * Matching strategy (all OR — first hit wins):
+ *   1. Query is a substring of the title (case-insensitive).
+ *   2. Query is a substring of any date variant for sunday_date.
+ *   3. Query is a substring of any featured member's full name (case-insensitive).
+ */
+function matchesSearch(recording: SundayRecordingWithTeam, query: string): boolean {
+  if (!query.trim()) return true;
+  const q = query.trim().toLowerCase();
+
+  if (recording.title.toLowerCase().includes(q)) return true;
+
+  if (getDateVariants(recording.sunday_date).some((v) => v.includes(q))) return true;
+
+  if (recording.featured_members.some((m) => m.name.toLowerCase().includes(q))) return true;
+
+  return false;
+}
+
 export default function AdminRecordingsPage() {
   const { member, loading: memberLoading } = useCurrentMember();
   const canUpload = !memberLoading && member !== null &&
@@ -30,6 +74,7 @@ export default function AdminRecordingsPage() {
 
   const [recordings, setRecordings] = useState<SundayRecordingWithTeam[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -125,6 +170,8 @@ export default function AdminRecordingsPage() {
     }
   }
 
+  const filteredRecordings = recordings.filter((r) => matchesSearch(r, searchQuery));
+
   if (loadError) {
     return (
       <div className="min-h-screen p-6 flex items-center justify-center">
@@ -141,19 +188,31 @@ export default function AdminRecordingsPage() {
       <div className="max-w-5xl mx-auto space-y-6">
 
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-4">
+          <div className="shrink-0">
             <h1 className="text-2xl font-bold text-gray-900">Sunday Recordings</h1>
             <p className="text-sm text-gray-500 mt-0.5">Upload and manage post-service recordings</p>
           </div>
-          {canUpload && (
-            <button
-              onClick={() => { setSaveError(null); setIsUploadOpen(true); }}
-              className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium"
-            >
-              + Upload Recording
-            </button>
-          )}
+          <div className="flex items-center gap-3 flex-1 justify-end">
+            {recordings.length > 0 && (
+              <input
+                type="search"
+                aria-label="Search recordings"
+                placeholder="Search by title, date, or member…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-72 border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+              />
+            )}
+            {canUpload && (
+              <button
+                onClick={() => { setSaveError(null); setIsUploadOpen(true); }}
+                className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium shrink-0"
+              >
+                + Upload Recording
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Table */}
@@ -161,6 +220,10 @@ export default function AdminRecordingsPage() {
           {recordings.length === 0 ? (
             <div className="p-12 text-center text-gray-400 text-sm">
               No recordings yet. Upload one to get started.
+            </div>
+          ) : filteredRecordings.length === 0 ? (
+            <div className="p-12 text-center text-gray-400 text-sm">
+              No recordings found for &ldquo;{searchQuery}&rdquo;.
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -175,7 +238,7 @@ export default function AdminRecordingsPage() {
                 </tr>
               </thead>
               <tbody>
-                {recordings.map((rec) => (
+                {filteredRecordings.map((rec) => (
                   <tr key={rec.id} className="border-t border-gray-100">
                     <td className="px-4 py-3 font-medium text-gray-800">{rec.title}</td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDate(rec.sunday_date)}</td>

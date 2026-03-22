@@ -391,7 +391,7 @@ describe("Middleware — x-tenant-name header injection (dynamic tenant labels)"
     expect(res.status).toBe(404);
   });
 
-  it("falls back to sb-tenant-id cookie when subdomain slug is present but unrecognised (worship.gracetoyou.com.au regression)", async () => {
+  it("falls back to sb-tenant-id cookie when subdomain slug is present but unrecognised (worship.example.org regression)", async () => {
     // Regression: WCC org slug is 'wcc' but production subdomain is 'worship'.
     // After MULTI_TENANT_ENABLED was set to true, slug = 'worship' was extracted,
     // DB returned empty, tenantId was null, and all admin routes returned 404.
@@ -408,9 +408,9 @@ describe("Middleware — x-tenant-name header injection (dynamic tenant labels)"
       `sb-tenant-id=${JULIUS_TENANT_ID}`,
       `sb:token=${makeSbToken(JULIUS_EMAIL)}`,
     ].join("; ");
-    const req = new NextRequest("https://worship.gracetoyou.com.au/admin/roster", {
+    const req = new NextRequest("https://worship.example.org/admin/roster", {
       headers: {
-        host: "worship.gracetoyou.com.au",
+        host: "worship.example.org",
         cookie: cookieStr,
       },
     });
