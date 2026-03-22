@@ -1,0 +1,393 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import type { SundayRecordingWithTeam } from "@/lib/types/database";
+import { formatDuration } from "@/lib/utils/recordings";
+
+function useCurrentMember() {
+  const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (!cancelled) { setMember(data ?? null); setLoading(false); } })
+      .catch(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+  return { member, loading };
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-AU", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
+}
+
+export default function AdminRecordingsPage() {
+  const { member, loading: memberLoading } = useCurrentMember();
+  const canUpload = !memberLoading && member !== null &&
+    (member.app_role === "Admin" || member.app_role === "Coordinator");
+
+  const [recordings, setRecordings] = useState<SundayRecordingWithTeam[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState<SundayRecordingWithTeam | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  function showToast(message: string, type: "success" | "error" = "success") {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const res = await fetch("/api/recordings");
+        if (!res.ok) {
+          let msg = `Failed to load recordings (${res.status})`;
+          try { const j = await res.json(); msg = j.error ?? msg; } catch { /* ignore */ }
+          if (!cancelled) setLoadError(msg);
+          return;
+        }
+        const data: unknown = await res.json();
+        if (!cancelled && Array.isArray(data)) setRecordings(data as SundayRecordingWithTeam[]);
+      } catch (err) {
+        console.error("Could not load /api/recordings:", err);
+        if (!cancelled) setLoadError("Network error — could not load recordings.");
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  async function handleUpload(payload: {
+    title: string;
+    sunday_date: string;
+    recording_type: "audio" | "video";
+    drive_url: string;
+    duration: string;
+  }) {
+    if (isSaving) return;
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      const res = await fetch("/api/recordings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
+      if (!res.ok) {
+        setSaveError(json?.error ?? "Failed to upload recording");
+        return;
+      }
+      // Re-fetch full list to get featured_members
+      const refreshed = await fetch("/api/recordings").then((r) => r.json()).catch(() => null);
+      if (Array.isArray(refreshed)) setRecordings(refreshed as SundayRecordingWithTeam[]);
+      setIsUploadOpen(false);
+      showToast("Recording uploaded successfully");
+    } catch (err) {
+      console.error("handleUpload error:", err);
+      setSaveError("An unexpected error occurred");
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleting || isDeleting) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/recordings/${deleting.id}`, { method: "DELETE" });
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
+      if (!res.ok) {
+        showToast(json?.error ?? "Failed to delete recording", "error");
+        return;
+      }
+      setRecordings((prev) => prev.filter((r) => r.id !== deleting.id));
+      setIsDeleteOpen(false);
+      setDeleting(null);
+      showToast("Recording deleted");
+    } catch (err) {
+      console.error("handleDelete error:", err);
+      showToast("An unexpected error occurred", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <div className="bg-red-50 border border-red-200 rounded-lg px-6 py-4 text-sm text-red-700 max-w-md text-center">
+          <p className="font-medium mb-1">Could not load recordings</p>
+          <p className="text-red-600">{loadError}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen p-6">
+      <div className="max-w-5xl mx-auto space-y-6">
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Sunday Recordings</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Upload and manage post-service recordings</p>
+          </div>
+          {canUpload && (
+            <button
+              onClick={() => { setSaveError(null); setIsUploadOpen(true); }}
+              className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium"
+            >
+              + Upload Recording
+            </button>
+          )}
+        </div>
+
+        {/* Table */}
+        <div className="bg-white border border-gray-100 rounded-lg shadow-sm overflow-hidden">
+          {recordings.length === 0 ? (
+            <div className="p-12 text-center text-gray-400 text-sm">
+              No recordings yet. Upload one to get started.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs border-b border-gray-100">
+                  <th className="px-4 py-3 text-gray-600 font-medium">Title</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Date</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Type</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Duration</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Featured Team</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recordings.map((rec) => (
+                  <tr key={rec.id} className="border-t border-gray-100">
+                    <td className="px-4 py-3 font-medium text-gray-800">{rec.title}</td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDate(rec.sunday_date)}</td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700 uppercase tracking-wide">
+                        {rec.recording_type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 tabular-nums">
+                      {formatDuration(rec.duration_seconds) ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {rec.featured_members.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {rec.featured_members.map((m) => (
+                            <span key={m.id} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 font-medium">
+                              {m.name.split(" ")[0]}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2 items-center">
+                        <a
+                          href={rec.drive_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 rounded border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          Open
+                        </a>
+                        {canUpload && (
+                          <button
+                            onClick={() => { setDeleting(rec); setIsDeleteOpen(true); }}
+                            className="px-3 py-1 rounded border border-red-300 text-xs text-red-600 bg-white hover:bg-red-50"
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Upload Modal */}
+      {isUploadOpen && canUpload && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Upload Recording</h2>
+            </div>
+            {saveError && (
+              <div className="mx-6 mt-4 px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {saveError}
+              </div>
+            )}
+            <div className="px-6 py-5">
+              <UploadForm
+                isSaving={isSaving}
+                onCancel={() => setIsUploadOpen(false)}
+                onSave={handleUpload}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {isDeleteOpen && deleting && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200">
+            <h3 className="text-base font-semibold text-gray-900">Delete Recording?</h3>
+            <p className="text-sm text-gray-600 mt-2">
+              Are you sure you want to delete &quot;{deleting.title}&quot;? This cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={isDeleting}
+                onClick={() => { setIsDeleteOpen(false); setDeleting(null); }}
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-lg border border-red-300 text-sm text-red-600 bg-white hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+          toast.type === "error" ? "bg-red-600 text-white" : "bg-gray-900 text-white"
+        }`}>
+          {toast.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function UploadForm({
+  isSaving,
+  onCancel,
+  onSave,
+}: {
+  isSaving: boolean;
+  onCancel: () => void;
+  onSave: (p: { title: string; sunday_date: string; recording_type: "audio" | "video"; drive_url: string; duration: string }) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [sundayDate, setSundayDate] = useState("");
+  const [recordingType, setRecordingType] = useState<"audio" | "video">("audio");
+  const [driveUrl, setDriveUrl] = useState("");
+  const [duration, setDuration] = useState("");
+
+  return (
+    <div className="space-y-4">
+      {/* Title */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">Title</label>
+        <input
+          className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          placeholder="e.g. Sunday Morning Service - Live Mix"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+      </div>
+
+      {/* Date + Type row */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Sunday Date</label>
+          <input
+            type="date"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            value={sundayDate}
+            onChange={(e) => setSundayDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Type</label>
+          <select
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            value={recordingType}
+            onChange={(e) => setRecordingType(e.target.value as "audio" | "video")}
+          >
+            <option value="audio">Audio</option>
+            <option value="video">Video</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Google Drive URL */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          Google Drive URL
+        </label>
+        <input
+          type="url"
+          className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          placeholder="https://drive.google.com/file/d/…/view"
+          value={driveUrl}
+          onChange={(e) => setDriveUrl(e.target.value)}
+        />
+        <p className="mt-1 text-xs text-gray-400">Paste the share link from Google Drive</p>
+      </div>
+
+      {/* Duration */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+          Duration <span className="text-gray-400 font-normal">(optional, MM:SS)</span>
+        </label>
+        <input
+          className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+          placeholder="e.g. 45:22"
+          value={duration}
+          onChange={(e) => setDuration(e.target.value)}
+        />
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-end gap-2 pt-1">
+        <button
+          disabled={isSaving}
+          onClick={onCancel}
+          className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Cancel
+        </button>
+        <button
+          disabled={isSaving || !title.trim() || !sundayDate || !driveUrl.trim()}
+          onClick={() => onSave({ title: title.trim(), sunday_date: sundayDate, recording_type: recordingType, drive_url: driveUrl.trim(), duration: duration.trim() })}
+          className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {isSaving ? "Uploading…" : "Upload"}
+        </button>
+      </div>
+    </div>
+  );
+}

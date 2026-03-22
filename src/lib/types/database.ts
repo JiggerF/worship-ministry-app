@@ -322,3 +322,26 @@ export interface AvailabilityDateEntry {
   date: string;      // YYYY-MM-DD
   available: boolean;
 }
+
+// ─────────────────────────────────────────────
+// SUNDAY RECORDINGS
+// ─────────────────────────────────────────────
+
+export type RecordingType = "audio" | "video";
+
+export interface SundayRecording {
+  id: string;
+  tenant_id: string;
+  title: string;
+  sunday_date: string;        // YYYY-MM-DD
+  recording_type: RecordingType;
+  drive_url: string;          // Google Drive share link
+  duration_seconds: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
+/** SundayRecording joined with the roster members for that Sunday. */
+export interface SundayRecordingWithTeam extends SundayRecording {
+  featured_members: { id: string; name: string }[];
+}

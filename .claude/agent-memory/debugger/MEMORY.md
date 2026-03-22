@@ -240,8 +240,23 @@ export async function generateMetadata(): Promise<Metadata> {
 
 ---
 
+### FAILURE CLASS 14 — PostgREST "more than one relationship was found"
+
+**Symptom:** DB helper throws "Could not embed because more than one relationship was found for 'roster' and 'members'".
+
+**Root cause:** `roster` has two FK columns to `members`: `member_id` and `assigned_by` (both defined in migration 001). Using `member:members(id, name)` in `.select()` is ambiguous — PostgREST cannot choose which FK to traverse.
+
+**Fix:** Use column-name hint: `member:member_id(id, name)` instead of `member:members(id, name)`.
+
+**General rule:** When a table has multiple FKs to the same target, always use `alias:column_name(...)` not `alias:table_name(...)` in PostgREST embed syntax.
+
+**Full notes:** `.claude/agent-memory/debugger/postgrest-fk-ambiguity.md`
+
+---
+
 ## Test Commands
 
 - Auth route tests: `npx vitest run __tests__/integration/auth-route.test.ts`
 - Middleware tenant tests: `npx vitest run __tests__/integration/middleware-tenant.test.ts`
 - Component tests: `npm run test:components`
+- Recordings route tests: `npx vitest run __tests__/integration/recordings-route.test.ts`
