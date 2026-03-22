@@ -55,7 +55,7 @@ sees "You do not have platform admin access." when trying to log in or access ad
 **Root cause (two parts):**
 
 Part A — Subdomain slug mismatch: `resolveTenantId()` extracts the first subdomain segment
-from the production hostname (e.g. `worship` from `worship.gracetoyou.com.au`) and queries
+from the production hostname (e.g. `worship` from `worship.example.org`) and queries
 `organizations WHERE slug = 'worship'`. The WCC organization was seeded with `slug = 'wcc'`,
 so the lookup returns no rows. Previously `resolveTenantId()` returned `null` immediately when
 the slug lookup failed — skipping the `sb-tenant-id` cookie fallback. With `MULTI_TENANT_ENABLED=true`,
@@ -176,7 +176,7 @@ If behavior is wrong in dev, force recompile: `rm -rf .next && npm run dev`.
 
 ### FAILURE CLASS 12 — Portal/Admin Layout Shows Hardcoded WCC Label for Other Tenants
 
-**Symptom:** `cfc.gracetoyou.com.au/portal/roster` shows "WORDCC Worship Team" instead of "CFC Worship Ministry".
+**Symptom:** `cfc.example.org/portal/roster` shows "WORDCC Worship Team" instead of "CFC Worship Ministry".
 
 **Root cause:** `src/app/portal/layout.tsx` is a `"use client"` component with a hardcoded string
 literal on line 23: `<h1>WORDCC Worship Team</h1>`. Because it is a client component it cannot call
@@ -240,8 +240,23 @@ export async function generateMetadata(): Promise<Metadata> {
 
 ---
 
+### FAILURE CLASS 14 — PostgREST "more than one relationship was found"
+
+**Symptom:** DB helper throws "Could not embed because more than one relationship was found for 'roster' and 'members'".
+
+**Root cause:** `roster` has two FK columns to `members`: `member_id` and `assigned_by` (both defined in migration 001). Using `member:members(id, name)` in `.select()` is ambiguous — PostgREST cannot choose which FK to traverse.
+
+**Fix:** Use column-name hint: `member:member_id(id, name)` instead of `member:members(id, name)`.
+
+**General rule:** When a table has multiple FKs to the same target, always use `alias:column_name(...)` not `alias:table_name(...)` in PostgREST embed syntax.
+
+**Full notes:** `.claude/agent-memory/debugger/postgrest-fk-ambiguity.md`
+
+---
+
 ## Test Commands
 
 - Auth route tests: `npx vitest run __tests__/integration/auth-route.test.ts`
 - Middleware tenant tests: `npx vitest run __tests__/integration/middleware-tenant.test.ts`
 - Component tests: `npm run test:components`
+- Recordings route tests: `npx vitest run __tests__/integration/recordings-route.test.ts`

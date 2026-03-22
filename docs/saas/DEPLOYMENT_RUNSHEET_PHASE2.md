@@ -105,7 +105,7 @@ Merge strategy: Squash or Merge commit — no rebase.
 SELECT provision_tenant(
   'CFC Worship Ministry',
   'cfc',
-  'jsabelino@gmail.com',
+  '<cfc-admin-email>',
   'Julius Sabelino'
 );
 

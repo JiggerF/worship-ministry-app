@@ -48,6 +48,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: "/admin/setlist", label: "Setlist", icon: "🎶", feature: "setlist" },
   { href: "/admin/songs", label: "Song Manager", icon: "🎵", feature: "songs" },
   { href: "/admin/people", label: "People", icon: "👥" },
+  { href: "/admin/recordings", label: "Recordings", icon: "🎙️" },
   { href: "/admin/handbook", label: "Team Handbook", icon: "📖", feature: "handbook" },
   { href: "/admin/help", label: "Help", icon: "❓" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
@@ -147,6 +148,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {[
             { href: "/portal/roster", label: "Roster", icon: "📋" },
             { href: "/portal/songs", label: "Song Library", icon: "🎵" },
+            { href: "/portal/recordings", label: "Recordings", icon: "🎙️" },
           ].map(({ href, label, icon }) => (
             <a
               key={href}

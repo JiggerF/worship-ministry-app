@@ -11,7 +11,7 @@ export const APP_INFO = {
   releaseDate: "2026",
   author: {
     name: "Jigger Fantonial",
-    email: "jiggerfantonial@yahoo.com",
+    email: "",
     role: "Creator & Developer",
     note: "Built as a free tool for churches. Feedback and bug reports are always welcome.",
   },

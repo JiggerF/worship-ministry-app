@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Worship Ministry App",
     description: "Plan, share, and coordinate your worship team. Chord charts, team rosters, setlists, and more — all in one place.",
-    url: "https://worship.gracetoyou.com.au",
+    url: process.env.NEXT_PUBLIC_APP_URL ?? "",
     siteName: "Worship Ministry App",
     images: [
       {

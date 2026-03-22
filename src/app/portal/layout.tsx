@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 const NAV_TABS = [
   { href: "/portal/roster", label: "Roster" },
   { href: "/portal/songs", label: "Song Library" },
+  { href: "/portal/recordings", label: "Recordings" },
   { href: "#", label: "Calendar", comingSoon: true },
 ];
 
