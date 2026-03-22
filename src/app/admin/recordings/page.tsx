@@ -23,48 +23,39 @@ function formatDate(iso: string) {
   return d.toLocaleDateString("en-AU", { weekday: "short", year: "numeric", month: "short", day: "numeric" });
 }
 
-/**
- * Produces every human-readable date representation for an ISO date string
- * so that partial natural-language queries ("22 Mar", "March 2026", "2026-03-22")
- * all resolve to the same recording.
- */
 function getDateVariants(isoDate: string): string[] {
   const d = new Date(isoDate + "T00:00:00");
   return [
-    isoDate,                                                                                                       // "2026-03-22"
-    d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),                            // "22 March 2026"
-    d.toLocaleDateString("en-AU", { day: "numeric", month: "long" }),                                             // "22 March"
-    d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),                           // "22 Mar 2026"
-    d.toLocaleDateString("en-AU", { day: "numeric", month: "short" }),                                            // "22 Mar"
-    d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),                                            // "March 2026"
-    d.toLocaleDateString("en-AU", { month: "short", year: "numeric" }),                                           // "Mar 2026"
-    d.toLocaleDateString("en-AU", { year: "numeric" }),                                                           // "2026"
-    d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),                            // "March 22, 2026"
-    d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }),                           // "Mar 22, 2026"
-    String(d.getDate()),                                                                                           // "22"
-    String(d.getFullYear()),                                                                                       // "2026"
+    isoDate,
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" }),
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "long" }),
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short", year: "numeric" }),
+    d.toLocaleDateString("en-AU", { day: "numeric", month: "short" }),
+    d.toLocaleDateString("en-AU", { month: "long", year: "numeric" }),
+    d.toLocaleDateString("en-AU", { month: "short", year: "numeric" }),
+    d.toLocaleDateString("en-AU", { year: "numeric" }),
+    d.toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" }),
+    d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" }),
+    String(d.getDate()),
+    String(d.getFullYear()),
   ].map((s) => s.toLowerCase());
 }
 
-/**
- * Returns true when the recording matches the trimmed, lower-cased query.
- *
- * Matching strategy (all OR — first hit wins):
- *   1. Query is a substring of the title (case-insensitive).
- *   2. Query is a substring of any date variant for sunday_date.
- *   3. Query is a substring of any featured member's full name (case-insensitive).
- */
 function matchesSearch(recording: SundayRecordingWithTeam, query: string): boolean {
   if (!query.trim()) return true;
   const q = query.trim().toLowerCase();
-
   if (recording.title.toLowerCase().includes(q)) return true;
-
   if (getDateVariants(recording.sunday_date).some((v) => v.includes(q))) return true;
-
   if (recording.featured_members.some((m) => m.name.toLowerCase().includes(q))) return true;
-
   return false;
+}
+
+/** Duration in seconds → "MM:SS" string for pre-filling the edit form. */
+function secondsToMMSS(s: number | null): string {
+  if (s == null) return "";
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 export default function AdminRecordingsPage() {
@@ -80,6 +71,12 @@ export default function AdminRecordingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Edit modal state
+  const [editing, setEditing] = useState<SundayRecordingWithTeam | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState<SundayRecordingWithTeam | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -88,6 +85,18 @@ export default function AdminRecordingsPage() {
   function showToast(message: string, type: "success" | "error" = "success") {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  }
+
+  async function loadRecordings() {
+    const res = await fetch("/api/recordings");
+    if (!res.ok) {
+      let msg = `Failed to load recordings (${res.status})`;
+      try { const j = await res.json(); msg = j.error ?? msg; } catch { /* ignore */ }
+      setLoadError(msg);
+      return;
+    }
+    const data: unknown = await res.json();
+    if (Array.isArray(data)) setRecordings(data as SundayRecordingWithTeam[]);
   }
 
   useEffect(() => {
@@ -134,9 +143,7 @@ export default function AdminRecordingsPage() {
         setSaveError(json?.error ?? "Failed to upload recording");
         return;
       }
-      // Re-fetch full list to get featured_members
-      const refreshed = await fetch("/api/recordings").then((r) => r.json()).catch(() => null);
-      if (Array.isArray(refreshed)) setRecordings(refreshed as SundayRecordingWithTeam[]);
+      await loadRecordings();
       setIsUploadOpen(false);
       showToast("Recording uploaded successfully");
     } catch (err) {
@@ -144,6 +151,40 @@ export default function AdminRecordingsPage() {
       setSaveError("An unexpected error occurred");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleEdit(payload: {
+    title: string;
+    sunday_date: string;
+    recording_type: "audio" | "video";
+    drive_url: string;
+    duration: string;
+  }) {
+    if (!editing || isEditing) return;
+    setIsEditing(true);
+    setEditError(null);
+    try {
+      const res = await fetch(`/api/recordings/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
+      if (!res.ok) {
+        setEditError(json?.error ?? "Failed to save changes");
+        return;
+      }
+      await loadRecordings();
+      setIsEditOpen(false);
+      setEditing(null);
+      showToast("Recording updated");
+    } catch (err) {
+      console.error("handleEdit error:", err);
+      setEditError("An unexpected error occurred");
+    } finally {
+      setIsEditing(false);
     }
   }
 
@@ -233,7 +274,7 @@ export default function AdminRecordingsPage() {
                   <th className="px-4 py-3 text-gray-600 font-medium">Date</th>
                   <th className="px-4 py-3 text-gray-600 font-medium">Type</th>
                   <th className="px-4 py-3 text-gray-600 font-medium">Duration</th>
-                  <th className="px-4 py-3 text-gray-600 font-medium">Featured Team</th>
+                  <th className="px-4 py-3 text-gray-600 font-medium">Musicians</th>
                   <th className="px-4 py-3 text-gray-600 font-medium">Actions</th>
                 </tr>
               </thead>
@@ -254,8 +295,9 @@ export default function AdminRecordingsPage() {
                       {rec.featured_members.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {rec.featured_members.map((m) => (
-                            <span key={m.id} className="px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 font-medium">
+                            <span key={m.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-700 font-medium whitespace-nowrap">
                               {m.name.split(" ")[0]}
+                              <span className="text-blue-400 font-normal">· {m.instrument}</span>
                             </span>
                           ))}
                         </div>
@@ -274,12 +316,24 @@ export default function AdminRecordingsPage() {
                           Open
                         </a>
                         {canUpload && (
-                          <button
-                            onClick={() => { setDeleting(rec); setIsDeleteOpen(true); }}
-                            className="px-3 py-1 rounded border border-red-300 text-xs text-red-600 bg-white hover:bg-red-50"
-                          >
-                            Delete
-                          </button>
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditError(null);
+                                setEditing(rec);
+                                setIsEditOpen(true);
+                              }}
+                              className="px-3 py-1 rounded border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => { setDeleting(rec); setIsDeleteOpen(true); }}
+                              className="px-3 py-1 rounded border border-red-300 text-xs text-red-600 bg-white hover:bg-red-50"
+                            >
+                              Delete
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -304,10 +358,41 @@ export default function AdminRecordingsPage() {
               </div>
             )}
             <div className="px-6 py-5">
-              <UploadForm
+              <RecordingForm
                 isSaving={isSaving}
                 onCancel={() => setIsUploadOpen(false)}
                 onSave={handleUpload}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {isEditOpen && editing && canUpload && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl w-full max-w-lg shadow-xl border border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Edit Recording</h2>
+            </div>
+            {editError && (
+              <div className="mx-6 mt-4 px-4 py-2.5 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                {editError}
+              </div>
+            )}
+            <div className="px-6 py-5">
+              <RecordingForm
+                isSaving={isEditing}
+                onCancel={() => { setIsEditOpen(false); setEditing(null); }}
+                onSave={handleEdit}
+                initialValues={{
+                  title: editing.title,
+                  sunday_date: editing.sunday_date,
+                  recording_type: editing.recording_type,
+                  drive_url: editing.drive_url,
+                  duration: secondsToMMSS(editing.duration_seconds),
+                }}
+                submitLabel="Save Changes"
               />
             </div>
           </div>
@@ -354,20 +439,32 @@ export default function AdminRecordingsPage() {
   );
 }
 
-function UploadForm({
+interface RecordingFormValues {
+  title: string;
+  sunday_date: string;
+  recording_type: "audio" | "video";
+  drive_url: string;
+  duration: string;
+}
+
+function RecordingForm({
   isSaving,
   onCancel,
   onSave,
+  initialValues,
+  submitLabel = "Upload",
 }: {
   isSaving: boolean;
   onCancel: () => void;
-  onSave: (p: { title: string; sunday_date: string; recording_type: "audio" | "video"; drive_url: string; duration: string }) => void;
+  onSave: (p: RecordingFormValues) => void;
+  initialValues?: Partial<RecordingFormValues>;
+  submitLabel?: string;
 }) {
-  const [title, setTitle] = useState("");
-  const [sundayDate, setSundayDate] = useState("");
-  const [recordingType, setRecordingType] = useState<"audio" | "video">("audio");
-  const [driveUrl, setDriveUrl] = useState("");
-  const [duration, setDuration] = useState("");
+  const [title, setTitle] = useState(initialValues?.title ?? "");
+  const [sundayDate, setSundayDate] = useState(initialValues?.sunday_date ?? "");
+  const [recordingType, setRecordingType] = useState<"audio" | "video">(initialValues?.recording_type ?? "audio");
+  const [driveUrl, setDriveUrl] = useState(initialValues?.drive_url ?? "");
+  const [duration, setDuration] = useState(initialValues?.duration ?? "");
 
   return (
     <div className="space-y-4">
@@ -448,7 +545,7 @@ function UploadForm({
           onClick={() => onSave({ title: title.trim(), sunday_date: sundayDate, recording_type: recordingType, drive_url: driveUrl.trim(), duration: duration.trim() })}
           className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {isSaving ? "Uploading…" : "Upload"}
+          {isSaving ? "Saving…" : submitLabel}
         </button>
       </div>
     </div>

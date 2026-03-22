@@ -129,11 +129,11 @@ export default function PortalTrackPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Page heading */}
-      <div className="text-center pt-2 pb-4">
-        <blockquote className="text-sm italic text-gray-400 mt-1">&ldquo;Steward every note for the glory of God.&rdquo;</blockquote>
-      </div>
+    <div className="space-y-4">
+      {/* Quote */}
+      <p className="text-sm italic text-gray-500 text-center">
+        &ldquo;As each has received a gift, use it to serve one another, as good stewards of God&apos;s varied grace.&rdquo; - 1 Peter 4:10
+      </p>
 
       {/* Search */}
       <div className="relative">
@@ -232,19 +232,20 @@ function RecordingCard({ rec }: { rec: SundayRecordingWithTeam }) {
         </button>
       )}
 
-      {/* Featured team */}
+      {/* Featured musicians */}
       {rec.featured_members.length > 0 && (
         <div>
-          <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase flex items-center gap-1.5 mb-1.5">
-            🎵 Featured Team
+          <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase flex items-center gap-1.5 mb-2">
+            🎵 On Stage
           </p>
           <div className="flex flex-wrap gap-1.5">
             {rec.featured_members.map((m) => (
               <span
                 key={m.id}
-                className="px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-200 text-xs font-medium text-gray-800"
               >
                 {m.name.split(" ")[0]}
+                <span className="text-gray-400 font-normal">· {m.instrument}</span>
               </span>
             ))}
           </div>

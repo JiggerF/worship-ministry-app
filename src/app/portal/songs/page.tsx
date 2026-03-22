@@ -76,13 +76,16 @@ function SongPoolPageInner() {
   return (
     <div className="space-y-4">
       {/* Search Bar */}
-      <input
-        type="text"
-        className={`${styles.inputDarkText} ${styles.inputDarkPlaceholder} w-full px-4 py-2.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent`}
-        placeholder="Search by song title or artist..."
-        value={search}
-        onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-      />
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+        <input
+          type="text"
+          className={`${styles.inputDarkText} ${styles.inputDarkPlaceholder} w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-gray-900`}
+          placeholder="Search by song title or artist..."
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+        />
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-2">

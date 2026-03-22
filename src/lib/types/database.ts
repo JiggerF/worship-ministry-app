@@ -343,5 +343,5 @@ export interface SundayRecording {
 
 /** SundayRecording joined with the roster members for that Sunday. */
 export interface SundayRecordingWithTeam extends SundayRecording {
-  featured_members: { id: string; name: string }[];
+  featured_members: { id: string; name: string; instrument: string }[];
 }

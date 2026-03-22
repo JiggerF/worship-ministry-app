@@ -1,6 +1,10 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { SundayRecording, SundayRecordingWithTeam } from "@/lib/types/database";
+import { ROLE_LABEL_MAP } from "@/lib/constants/roles";
+
+/** Roster roles that are not performing musicians — exclude from recording team display. */
+const NON_MUSICIAN_ROLES = new Set(["sound", "setup"]);
 
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -33,24 +37,34 @@ export async function getRecordings(tenantId: string): Promise<SundayRecordingWi
 
   const { data: assignments, error: rosterErr } = await supabase
     .from("roster")
-    .select("sunday_date:date, member:member_id(id, name)")
+    .select("sunday_date:date, role:role_id(name), member:member_id(id, name)")
     .eq("tenant_id", tenantId)
     .in("date", dates)
     .not("member_id", "is", null);
 
   if (rosterErr) throw new Error(`getRecordings (roster): ${rosterErr.message}`);
 
-  // Build a map: date → deduplicated member list
-  type MemberRef = { id: string; name: string };
+  // Build a map: date → deduplicated musician list (SND/Setup excluded)
+  type MemberRef = { id: string; name: string; instrument: string };
   const teamByDate = new Map<string, MemberRef[]>();
 
   for (const a of assignments ?? []) {
-    const m = a.member as unknown as MemberRef | null;
-    if (!m) continue;
+    const m = a.member as unknown as { id: string; name: string } | null;
+    const r = a.role as unknown as { name: string } | null;
+    if (!m || !r) continue;
+
+    // Skip non-performing roles (sound desk, setup crew)
+    if (NON_MUSICIAN_ROLES.has(r.name)) continue;
+
     const date = a.sunday_date as string;
     const existing = teamByDate.get(date) ?? [];
     if (!existing.find((x) => x.id === m.id)) {
-      existing.push({ id: m.id, name: m.name });
+      const roleKey = r.name as keyof typeof ROLE_LABEL_MAP;
+      existing.push({
+        id: m.id,
+        name: m.name,
+        instrument: ROLE_LABEL_MAP[roleKey] ?? r.name,
+      });
     }
     teamByDate.set(date, existing);
   }
@@ -84,6 +98,34 @@ export async function createRecording(
     .single();
 
   if (error) throw new Error(`createRecording: ${error.message}`);
+  return data as SundayRecording;
+}
+
+export interface UpdateRecordingPayload {
+  title?: string;
+  sunday_date?: string;
+  recording_type?: "audio" | "video";
+  drive_url?: string;
+  duration_seconds?: number | null;
+}
+
+/**
+ * Update a recording row scoped to the tenant.
+ */
+export async function updateRecording(
+  tenantId: string,
+  id: string,
+  payload: UpdateRecordingPayload
+): Promise<SundayRecording> {
+  const { data, error } = await supabase
+    .from("sunday_recordings")
+    .update(payload)
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .select()
+    .single();
+
+  if (error) throw new Error(`updateRecording: ${error.message}`);
   return data as SundayRecording;
 }
 
