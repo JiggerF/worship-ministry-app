@@ -45,7 +45,7 @@ export async function getRecordings(tenantId: string): Promise<SundayRecordingWi
   const teamByDate = new Map<string, MemberRef[]>();
 
   for (const a of assignments ?? []) {
-    const m = a.member as MemberRef | null;
+    const m = a.member as unknown as MemberRef | null;
     if (!m) continue;
     const date = a.sunday_date as string;
     const existing = teamByDate.get(date) ?? [];
