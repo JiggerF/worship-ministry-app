@@ -132,8 +132,7 @@ export default function PortalTrackPage() {
     <div className="space-y-8">
       {/* Page heading */}
       <div className="text-center pt-2 pb-4">
-        <h2 className="text-2xl font-bold text-gray-900">Sunday Recordings</h2>
-        <p className="text-sm text-gray-500 mt-1">“The weakest instruments are chosen to do the greatest works so that the glory might go to God. - Paul Washer”</p>
+        <blockquote className="text-sm italic text-gray-400 mt-1">&ldquo;Steward every note for the glory of God.&rdquo;</blockquote>
       </div>
 
       {/* Search */}
