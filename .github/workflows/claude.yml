@@ -1,0 +1,37 @@
+# Workflow 1: Interactive — respond to @claude mentions in PRs and issues.
+#
+# Usage examples in PR/issue comments:
+#   @claude implement this feature based on the issue description
+#   @claude fix the TypeScript error in src/app/admin/recordings/page.tsx
+#   @claude review this PR for tenant isolation issues
+#   @claude add a component test for the new modal I just built
+#   @claude why is this test failing?
+
+name: Claude Code
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    # Only run when @claude is mentioned — avoids unnecessary API calls
+    if: |
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Limit turns to avoid runaway jobs
+          claude_args: "--max-turns 10 --model claude-sonnet-4-6"

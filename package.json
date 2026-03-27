@@ -16,7 +16,10 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
     "test:coverage:unit": "vitest run --coverage __tests__/unit",
-    "test:all": "vitest run"
+    "test:all": "vitest run",
+    "test:intent": "vitest run __tests__/intent",
+    "prepare": "husky",
+    "test:intent:impact": "tsx shadow-agent/mapper.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.0.0",
@@ -54,8 +57,10 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "happy-dom": "^20.7.0",
+    "husky": "^9.1.7",
     "jsdom": "^28.1.0",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

@@ -1,9 +1,12 @@
 /**
  * Component tests — AdminRecordingsPage
  *
- * REGRESSION GUARD: Verifies that the upload modal renders all required form
- * fields, that Admin/Coordinator see the upload button, and that
- * read-only roles (Musician, WorshipLeader) do not.
+ * REGRESSION GUARD: Verifies that:
+ * - Upload modal renders all required form fields
+ * - Edit modal opens pre-populated and Save Changes button is present
+ * - Admin/Coordinator see Upload + Edit + Delete buttons; Musician does not
+ * - Instrument labels render correctly in the Musicians column
+ * - Search/filter, empty state, and pagination behaviour
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -37,8 +40,8 @@ const MOCK_RECORDINGS = [
     uploaded_by: "admin-1",
     created_at: "2026-03-15T10:00:00Z",
     featured_members: [
-      { id: "m1", name: "Tess Cruz" },
-      { id: "m2", name: "Joseph Lee" },
+      { id: "m1", name: "Tess Cruz", instrument: "Guitar" },
+      { id: "m2", name: "Joseph Lee", instrument: "Keys" },
     ],
   },
 ];
@@ -69,6 +72,9 @@ describe("AdminRecordingsPage", () => {
     expect(screen.getByText("45:22")).toBeInTheDocument();
     expect(screen.getByText("Tess")).toBeInTheDocument();
     expect(screen.getByText("Joseph")).toBeInTheDocument();
+    // Instrument labels must render (regression guard for SundayRecordingWithTeam.instrument field)
+    expect(screen.getByText("· Guitar")).toBeInTheDocument();
+    expect(screen.getByText("· Keys")).toBeInTheDocument();
   });
 
   it("Admin sees + Upload Recording button", async () => {
@@ -232,5 +238,62 @@ describe("AdminRecordingsPage", () => {
 
     await user.clear(input);
     expect(await screen.findByText("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+  });
+
+  // ─── Edit modal tests ─────────────────────────────────────────────────────
+
+  it("Admin sees Edit and Delete buttons per recording row", async () => {
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("Coordinator sees Edit and Delete buttons", async () => {
+    vi.stubGlobal("fetch", makeFetch(COORDINATOR_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("Musician does NOT see Edit or Delete buttons", async () => {
+    vi.stubGlobal("fetch", makeFetch(MUSICIAN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await screen.findByText("Sunday Morning Service - Live Mix");
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+  });
+
+  it("opens Edit Recording modal pre-populated with recording data", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+
+    // Modal heading
+    expect(screen.getByRole("heading", { name: "Edit Recording" })).toBeInTheDocument();
+
+    // Form fields pre-populated from MOCK_RECORDINGS[0]
+    expect(screen.getByDisplayValue("Sunday Morning Service - Live Mix")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("https://drive.google.com/file/d/ABC123/view?usp=sharing")).toBeInTheDocument();
+
+    // Submit button is "Save Changes" (not "Upload")
+    expect(screen.getByRole("button", { name: "Save Changes" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Upload" })).not.toBeInTheDocument();
+  });
+
+  it("Cancel closes the Edit Recording modal", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminRecordingsPage />);
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(screen.getByRole("heading", { name: "Edit Recording" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByRole("heading", { name: "Edit Recording" })).not.toBeInTheDocument();
+    });
   });
 });

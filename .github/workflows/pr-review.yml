@@ -1,0 +1,48 @@
+# Workflow 2: Automatic PR review on every PR opened or updated.
+#
+# Uses the staff-engineer and SDET skills defined in .claude/skills/ to review:
+#   - Architecture correctness and separation of concerns
+#   - Async handler patterns (try/catch/finally, setBusy in finally)
+#   - Modal form completeness (no placeholder comments)
+#   - Role-based auth: canEdit pattern, no "Admin" defaults
+#   - Tenant isolation: every DB write must include .eq("tenant_id", tenantId)
+#   - Test coverage: flags new features missing component or integration tests
+#
+# Posts review comments directly on the PR — no @claude needed.
+
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 5 --model claude-sonnet-4-6"
+          prompt: |
+            Review this pull request using the staff-engineer and SDET-quality-engineer
+            skills defined in .claude/skills/.
+
+            Focus on:
+            1. TENANT ISOLATION — every new DB query on a tenant-scoped table must include
+               .eq("tenant_id", tenantId). Flag any missing tenant scope as a security issue.
+            2. ASYNC HANDLERS — every async button handler must follow the try/catch/finally
+               pattern with setBusy(false) in finally and showToast() for errors (no alert()).
+            3. MODAL FORMS — no {/* ...existing code... */} placeholders inside <form> bodies.
+               Flag any placeholder as a critical regression risk.
+            4. ROLE DEFAULTS — never default role to "Admin". canEdit must require
+               member !== null explicitly.
+            5. TEST COVERAGE — flag any new API route, modal, or feature missing tests.
+            6. CODE QUALITY — architecture, separation of concerns, no unnecessary complexity.
+
+            Post your findings as inline PR review comments on the relevant lines.
+            Use "BLOCKER:", "WARNING:", or "NOTE:" prefixes to indicate severity.
+            Do not comment on lines that look correct — only flag actual issues.
