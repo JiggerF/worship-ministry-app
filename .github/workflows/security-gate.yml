@@ -1,0 +1,87 @@
+# Workflow 3: Tenant Security Gate — runs on changes to API routes or DB helpers.
+#
+# Automatically invokes the tenant-security-auditor and migration-safety-reviewer
+# agents defined in .claude/agents/ when relevant files change.
+#
+# This is the automated equivalent of the manual audit you'd do before setting
+# MULTI_TENANT_ENABLED=true in production.
+#
+# BLOCKER-level findings will cause the job to fail (exit 1) — blocking the merge.
+# Use "Squash and merge" with branch protection requiring this check to pass.
+
+name: Security Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      # API routes
+      - "src/app/api/**"
+      # DB helpers
+      - "src/lib/db/**"
+      # Middleware (tenant resolution, auth)
+      - "src/middleware.ts"
+      # Migrations
+      - "supabase/migrations/**"
+
+jobs:
+  tenant-security-audit:
+    name: Tenant Isolation Audit
+    runs-on: ubuntu-latest
+    # Only run when API routes or DB helpers changed
+    if: |
+      contains(github.event.pull_request.changed_files, 'src/app/api') ||
+      contains(github.event.pull_request.changed_files, 'src/lib/db') ||
+      contains(github.event.pull_request.changed_files, 'src/middleware.ts')
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 8 --model claude-sonnet-4-6"
+          prompt: |
+            Run the tenant-security-auditor agent (defined in .claude/agents/) on the
+            changed files in this pull request.
+
+            Audit every new or modified API route and DB helper for:
+            1. All DB queries on tenant-scoped tables include .eq("tenant_id", tenantId)
+            2. DELETEs include BOTH .eq("id", id) AND .eq("tenant_id", tenantId)
+            3. getActorFromRequest() is used for auth — not client-sent headers
+            4. No cross-tenant data leakage via missing WHERE clauses
+            5. Role checks happen server-side, not just client-side
+
+            If you find ANY BLOCKER-level tenant isolation issue:
+            - Post it as a PR review comment on the exact line
+            - Exit with a non-zero code to fail the check
+
+            If everything looks correct, post a brief "✅ Tenant isolation verified"
+            comment and exit 0.
+
+  migration-safety:
+    name: Migration Safety Review
+    runs-on: ubuntu-latest
+    # Only run when migrations changed
+    if: contains(toJSON(github.event.pull_request.files), 'supabase/migrations')
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 6 --model claude-sonnet-4-6"
+          prompt: |
+            Run the migration-safety-reviewer agent (defined in .claude/agents/) on any
+            new or modified SQL migration files in supabase/migrations/.
+
+            For each migration file, verify:
+            1. Migration is reversible (DROP TABLE has a corresponding rollback plan)
+            2. All new tables include tenant_id NOT NULL REFERENCES organizations(id)
+            3. No column removed that is referenced by application code
+            4. No destructive change (DROP COLUMN, ALTER TYPE) without a backup plan
+            5. New feature flags have default_enabled: false
+
+            Post findings as PR review comments. Flag BLOCKER issues to fail the check.
+            Post "✅ Migration safety verified" if all checks pass.

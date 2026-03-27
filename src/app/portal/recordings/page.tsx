@@ -132,7 +132,9 @@ export default function PortalTrackPage() {
     <div className="space-y-4">
       {/* Quote */}
       <p className="text-sm italic text-gray-500 text-center">
-        &ldquo;As each has received a gift, use it to serve one another, as good stewards of God&apos;s varied grace.&rdquo; - 1 Peter 4:10
+        &ldquo;As each has received a gift, use it to serve one another, as good stewards of God&apos;s varied grace.&rdquo;
+        <br />
+        <span className="block mt-1 text-xs not-italic text-gray-400">- 1 Peter 4:10</span>
       </p>
 
       {/* Search */}
