@@ -42,6 +42,10 @@ function displayKey(row: SetlistSongWithDetails): string {
   return row.chosen_key ?? row.song?.chord_charts?.[0]?.key ?? "—";
 }
 
+function displayYoutubeUrl(row: SetlistSongWithDetails): string | null {
+  return row.chosen_youtube_url ?? row.song?.youtube_url ?? null;
+}
+
 // ─────────────────────────────────────────────
 // Current member hook
 // ─────────────────────────────────────────────
@@ -488,6 +492,9 @@ export default function AdminSetlistPage() {
   // ── Inline key editing ───────────────────────
   const [editingKeyFor, setEditingKeyFor] = useState<string | null>(null); // row id
 
+  // ── Inline YouTube URL editing ───────────────
+  const [editingYoutubeFor, setEditingYoutubeFor] = useState<string | null>(null); // row id
+
   // ── Publish / revert ─────────────────────────
   const [publishing, setPublishing] = useState(false);
   const [reverting, setReverting] = useState(false);
@@ -709,12 +716,38 @@ export default function AdminSetlistPage() {
           song_id: row.song_id,
           position: row.position,
           chosen_key: newKey,
+          chosen_youtube_url: row.chosen_youtube_url ?? null,
         }),
       });
       if (!res.ok) throw new Error("Key update failed");
       await fetchSetlist();
     } catch (e) {
       setMutationError(e instanceof Error ? e.message : "Failed to update key");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleYoutubeChange(row: SetlistSongWithDetails, newUrl: string) {
+    setEditingYoutubeFor(null);
+    setSaving(true);
+    setMutationError(null);
+    try {
+      const res = await fetch("/api/setlist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sunday_date: row.sunday_date,
+          song_id: row.song_id,
+          position: row.position,
+          chosen_key: row.chosen_key ?? null,
+          chosen_youtube_url: newUrl.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Video update failed");
+      await fetchSetlist();
+    } catch (e) {
+      setMutationError(e instanceof Error ? e.message : "Failed to update video");
     } finally {
       setSaving(false);
     }
@@ -892,6 +925,7 @@ export default function AdminSetlistPage() {
               song_id: row.song_id,
               position: newPos,
               chosen_key: row.chosen_key ?? row.song?.chord_charts?.[0]?.key ?? null,
+              chosen_youtube_url: row.chosen_youtube_url ?? null,
             }),
           });
         })
@@ -1049,7 +1083,8 @@ export default function AdminSetlistPage() {
           {!loadingSetlist && displayRows.map((row) => {
             const key = displayKey(row);
             const isEditingKey = editingKeyFor === row.id;
-            const youtubeUrl = row.song?.youtube_url;
+            const youtubeUrl = displayYoutubeUrl(row);
+            const isEditingYoutube = editingYoutubeFor === row.id;
             const isDragging = draggedId === row.id;
             const isDragOver = dragOverId === row.id && draggedId !== row.id;
 
@@ -1137,17 +1172,57 @@ export default function AdminSetlistPage() {
                     )}
                   </div>
 
-                  {/* YouTube link */}
-                  {youtubeUrl && (
-                    <a
-                      href={youtubeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 mt-1"
-                    >
-                      <span>▶</span> Watch on YouTube
-                    </a>
-                  )}
+                  {/* YouTube override row */}
+                  <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                    {isEditingYoutube ? (
+                      <div className="flex items-center gap-2 w-full">
+                        <input
+                          autoFocus
+                          type="text"
+                          placeholder="https://youtu.be/…"
+                          defaultValue={row.chosen_youtube_url ?? ""}
+                          onBlur={(e) => {
+                            const newUrl = e.currentTarget.value;
+                            if (newUrl !== (row.chosen_youtube_url ?? "")) {
+                              handleYoutubeChange(row, newUrl);
+                            }
+                          }}
+                          className="flex-1 px-2 py-1 rounded-lg border border-gray-300 text-xs focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                        <button
+                          onClick={() => setEditingYoutubeFor(null)}
+                          className="text-xs text-gray-400 hover:text-gray-600"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        {youtubeUrl && (
+                          <a
+                            href={youtubeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-800 mt-1"
+                          >
+                            <span>▶</span> Watch on YouTube
+                            {row.chosen_youtube_url && (
+                              <span className="ml-1 text-gray-400 text-xs">(custom)</span>
+                            )}
+                          </a>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingYoutubeFor(row.id)}
+                            disabled={saving}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 hover:underline disabled:opacity-40"
+                          >
+                            {row.chosen_youtube_url ? "Change Video" : "Override Video"}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {/* Delete button — only for editors */}

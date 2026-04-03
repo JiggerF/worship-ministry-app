@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
 // Upserts a song into a position for a Sunday date.
 // Requires SETLIST_ROLES. Saving always resets status to DRAFT.
 //
-// Body: { sunday_date, song_id, position, chosen_key? }
+// Body: { sunday_date, song_id, position, chosen_key?, chosen_youtube_url? }
 // ─────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const actor = await getActorFromRequest(req);
@@ -72,11 +72,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { sunday_date, song_id, position, chosen_key } = body as {
+  const { sunday_date, song_id, position, chosen_key, chosen_youtube_url } = body as {
     sunday_date?: string;
     song_id?: string;
     position?: number;
     chosen_key?: string | null;
+    chosen_youtube_url?: string | null;
   };
 
   if (!sunday_date || !/^\d{4}-\d{2}-\d{2}$/.test(sunday_date)) {
@@ -92,12 +93,19 @@ export async function POST(req: NextRequest) {
 
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+  // Validate chosen_youtube_url if provided — must be https:// URL or null
+  let validatedYoutubeUrl = chosen_youtube_url ?? null;
+  if (validatedYoutubeUrl && !validatedYoutubeUrl.startsWith("https://")) {
+    return NextResponse.json({ error: "chosen_youtube_url must be a valid https:// URL" }, { status: 400 });
+  }
+
   try {
     const row = await upsertSetlistSong({
       sunday_date,
       song_id,
       position,
       chosen_key: chosen_key ?? null,
+      chosen_youtube_url: validatedYoutubeUrl,
       created_by: UUID_RE.test(actor.id ?? "") ? actor.id : null,
       tenant_id: actor.tenantId,
     });

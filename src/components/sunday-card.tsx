@@ -22,6 +22,7 @@ export type SetlistItem = {
   id?: string;
   position?: number;
   chosen_key?: string | null;
+  chosen_youtube_url?: string | null;
   song?: {
     id?: string;
     title: string;
@@ -411,10 +412,10 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
                           )}
                         </div>
 
-                        {/* YouTube */}
-                        {item.song?.youtube_url && (
+                        {/* YouTube — prefer override, fall back to library default */}
+                        {(item.chosen_youtube_url ?? item.song?.youtube_url) && (
                           <a
-                            href={item.song.youtube_url}
+                            href={item.chosen_youtube_url ?? item.song?.youtube_url ?? "#"}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:text-red-800 transition-colors"
@@ -423,6 +424,9 @@ export function SundayCard({ roster, isNext }: SundayCardProps) {
                               <path d="M8 5v14l11-7z" />
                             </svg>
                             Watch on YouTube
+                            {item.chosen_youtube_url && (
+                              <span className="ml-1 text-gray-400 text-xs">(custom)</span>
+                            )}
                           </a>
                         )}
                       </div>

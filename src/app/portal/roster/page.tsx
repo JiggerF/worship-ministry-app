@@ -287,6 +287,7 @@ export default function PortalRosterPage() {
                 id: row.id,
                 position: row.position,
                 chosen_key: row.chosen_key,
+                chosen_youtube_url: row.chosen_youtube_url,
                 song: row.song
                   ? {
                       id: row.song_id,
