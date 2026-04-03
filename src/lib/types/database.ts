@@ -170,6 +170,7 @@ export interface SetlistSong {
   song_id: string;
   position: number;          // 1–3
   chosen_key: string | null; // null → fall back to chord_charts[0].key at display/PDF time
+  chosen_youtube_url: string | null; // null → fall back to songs.youtube_url at display time
   status: SetlistStatus;
   created_by: string | null;
   created_at: string;

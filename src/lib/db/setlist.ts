@@ -19,6 +19,7 @@ export interface UpsertSetlistSongPayload {
   song_id: string;
   position: number;       // 1–3
   chosen_key?: string | null;
+  chosen_youtube_url?: string | null;
   created_by?: string | null;
   tenant_id: string;
 }
@@ -68,6 +69,7 @@ export async function upsertSetlistSong(
     song_id: payload.song_id,
     position: payload.position,
     chosen_key: payload.chosen_key ?? null,
+    chosen_youtube_url: payload.chosen_youtube_url ?? null,
     created_by: payload.created_by ?? null,
     status: "DRAFT" as SetlistStatus,
   };
