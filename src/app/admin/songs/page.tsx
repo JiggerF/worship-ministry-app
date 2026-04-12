@@ -1,6 +1,7 @@
 
 "use client";
 import { useMemo, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
@@ -61,6 +62,7 @@ const ITEMS_PER_PAGE = 20;
 const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 
 export default function AdminSongsPage() {
+  const searchParams = useSearchParams();
   const { member, loading: memberLoading } = useCurrentMember();
   // canEditSong: can edit existing songs (Admin + Coordinator + MusicCoordinator)
   const canEditSong = !memberLoading && member !== null &&
@@ -110,6 +112,19 @@ export default function AdminSongsPage() {
     load();
     return () => { cancelled = true; };
   }, []);
+
+  // Auto-open edit modal from ?edit={id} query param
+  useEffect(() => {
+    if (songs.length === 0 || !searchParams) return;
+    const editId = searchParams.get('edit');
+    if (!editId) return;
+    const song = songs.find((s) => s.id === editId);
+    if (song && canEditSong) {
+      setEditing(song);
+      setSaveError(null);
+      setIsEditOpen(true);
+    }
+  }, [searchParams, songs, canEditSong]);
 
   const filtered = useMemo(() => {
     const list = Array.isArray(songs) ? songs : [];
@@ -509,7 +524,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Artist</label>
           <input
-            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900"
             placeholder="Artist name"
             value={artist ?? ""}
             onChange={(e) => setArtist(e.target.value)}
@@ -544,7 +559,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Keys <span className="text-gray-400 font-normal">(comma separated)</span></label>
           <input
-            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900"
             placeholder="e.g. G, A, B♭"
             value={keys}
             onChange={(e) => setKeys(e.target.value)}
@@ -557,7 +572,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Scripture</label>
           <input
-            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900"
             placeholder="e.g. Psalm 100:1–5"
             value={scripture}
             onChange={(e) => setScripture(e.target.value)}
@@ -566,7 +581,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Video <span className="text-gray-400 font-normal">(YouTube URL)</span></label>
           <input
-            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900"
             placeholder="https://youtu.be/…"
             value={youtube}
             onChange={(e) => setYoutube(e.target.value)}
@@ -576,7 +591,7 @@ function EditForm({ song, isSaving, onCancel, onSave }: { song: SongWithCharts |
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Chord sheet <span className="text-gray-400 font-normal">(Google Drive URL)</span></label>
           <input
             type="url"
-            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-900"
             placeholder="https://drive.google.com/…"
             value={chordLink}
             onChange={(e) => setChordLink(e.target.value)}
