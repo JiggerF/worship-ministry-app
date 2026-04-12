@@ -47,6 +47,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: "/admin/availability", label: "Availability", icon: "📅", feature: "availability" },
   { href: "/admin/setlist", label: "Setlist", icon: "🎶", feature: "setlist" },
   { href: "/admin/songs", label: "Song Manager", icon: "🎵", feature: "songs" },
+  { href: "/admin/songs/health", label: "Song Health", icon: "💚", feature: "songs" },
   { href: "/admin/people", label: "People", icon: "👥" },
   { href: "/admin/recordings", label: "Recordings", icon: "🎙️" },
   { href: "/admin/handbook", label: "Team Handbook", icon: "📖", feature: "handbook" },
@@ -122,7 +123,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             Admin
           </p>
           {filteredSidebar.map((item) => {
-            const isActive = pathname.startsWith(item.href);
+            const isActive = pathname === item.href || (pathname.startsWith(item.href + "/") && !item.href.endsWith("/"));
             return (
               <Link
                 key={item.href}

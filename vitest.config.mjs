@@ -20,6 +20,7 @@ export default defineConfig({
     environment: "happy-dom",
     setupFiles: ["./__tests__/setup.ts"],
     include: ["./__tests__/**/*.test.{ts,tsx}"],
+    exclude: ["./__tests__/e2e/**"],
     // Set env vars before any module-level code runs (captures module-level env reads)
     env: {
       NEXT_PUBLIC_SUPABASE_URL: "http://localhost:54321",

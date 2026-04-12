@@ -1,7 +1,6 @@
 "use client";
 import { useMemo, useState, useEffect } from "react";
 import type { SongWithCharts } from "@/lib/types/database";
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
 function useCurrentMember() {
@@ -51,19 +50,12 @@ export default function SongHealthPage() {
   const [songs, setSongs] = useState<SongWithCharts[]>([]);
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [generatingIds, setGeneratingIds] = useState<Set<string>>(new Set());
-  const [generatedContent, setGeneratedContent] = useState<
-    Record<string, string>
-  >({});
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<"health" | "urls">("health");
   const [urlInputs, setUrlInputs] = useState<Record<string, string>>({});
   const [isSavingUrls, setIsSavingUrls] = useState(false);
   const [urlUpdateError, setUrlUpdateError] = useState<string | null>(null);
   const [urlUpdateSuccess, setUrlUpdateSuccess] = useState<string | null>(null);
-  const [isGeneratingBulk, setIsGeneratingBulk] = useState(false);
-  const [bulkGenerateProgress, setBulkGenerateProgress] = useState<{ current: number; total: number } | null>(null);
-  const [previewSongId, setPreviewSongId] = useState<string | null>(null);
+
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +77,8 @@ export default function SongHealthPage() {
           }
           const data = (await res.json()) as unknown;
           if (!cancelled && Array.isArray(data)) {
-            setSongs(data as SongWithCharts[]);
+            const loaded = data as SongWithCharts[];
+            setSongs(loaded);
             return;
           }
         } catch (err) {
@@ -146,107 +139,6 @@ export default function SongHealthPage() {
       songs.filter((s) => !computeHealth(s).hasScripture).length
   , [songs]);
 
-  async function handleGenerate(songId: string, song: SongWithCharts) {
-    if (!canEditSong || !song.title || !song.artist) return;
-    setGeneratingIds((prev) => new Set(prev).add(songId));
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 25000);
-    try {
-      const res = await fetch("/api/songs/generate-chords", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: song.title,
-          artist: song.artist,
-        }),
-        signal: controller.signal,
-      });
-      let json: { chordContent?: string; error?: string } | null = null;
-      try {
-        json = await res.json();
-      } catch {}
-      if (!res.ok) {
-        console.error("Generate failed:", json?.error);
-        return;
-      }
-      if (json?.chordContent) {
-        setGeneratedContent((prev) => ({
-          ...prev,
-          [songId]: json.chordContent!,
-        }));
-      }
-    } catch (err) {
-      console.error("handleGenerate error:", err);
-    } finally {
-      clearTimeout(timeout);
-      setGeneratingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(songId);
-        return next;
-      });
-    }
-  }
-
-  async function handleDownload(songId: string) {
-    const content = generatedContent[songId];
-    if (!content) return;
-    const song = songs.find((s) => s.id === songId);
-    if (!song) return;
-    try {
-      const { generateChordDocx } = await import(
-        "@/lib/generate-chord-docx"
-      );
-      const firstKey =
-        (song.chord_charts || [])[0]?.key ||
-        song.title.split(" ")[0] ||
-        "";
-      generateChordDocx(song.title, song.artist ?? "", firstKey, content);
-    } catch (err) {
-      console.error("handleDownload error:", err);
-    }
-  }
-
-  const selectAll = () => {
-    const missingChords = songs
-      .filter((s) => !computeHealth(s).hasChordSheet)
-      .map((s) => s.id);
-    setSelectedIds(new Set(missingChords));
-  };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  async function handleBulkGenerate() {
-    const songsToGenerate = Array.from(selectedIds)
-      .map((id) => songs.find((s) => s.id === id))
-      .filter((s) => s && s.title && s.artist) as SongWithCharts[];
-
-    setIsGeneratingBulk(true);
-    setBulkGenerateProgress({ current: 0, total: songsToGenerate.length });
-    try {
-      for (let i = 0; i < songsToGenerate.length; i++) {
-        const song = songsToGenerate[i];
-        await handleGenerate(song.id, song);
-        setBulkGenerateProgress({ current: i + 1, total: songsToGenerate.length });
-        // Delay between requests to respect OpenAI rate limits (1 req/2sec = 30 req/min)
-        if (i < songsToGenerate.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-      }
-    } finally {
-      setIsGeneratingBulk(false);
-      setBulkGenerateProgress(null);
-    }
-  }
 
   async function handleSaveUrls() {
     setIsSavingUrls(true);
@@ -312,6 +204,7 @@ export default function SongHealthPage() {
   }
 
   return (
+    <>
     <div className="min-h-screen p-6">
       <div className="max-w-7xl mx-auto space-y-6">
         <div>
@@ -394,54 +287,12 @@ export default function SongHealthPage() {
             </label>
           </div>
 
-          {/* Bulk actions */}
-          {canEditSong && (
-            <div className="flex items-center gap-2 mb-4">
-              <Button
-                onClick={selectAll}
-                className="px-3 py-1.5 text-xs border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg"
-              >
-                Select All Missing
-              </Button>
-              <Button
-                onClick={handleBulkGenerate}
-                disabled={selectedIds.size === 0 || isGeneratingBulk}
-                className="px-3 py-1.5 text-xs bg-gray-900 text-white hover:bg-gray-800 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {isGeneratingBulk && bulkGenerateProgress
-                  ? `Generating ${bulkGenerateProgress.current}/${bulkGenerateProgress.total}...`
-                  : `Generate Selected (${selectedIds.size})`}
-              </Button>
-            </div>
-          )}
 
           {/* Table */}
           <div className="relative w-full overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs">
-                  {canEditSong && (
-                    <th className="px-3 py-2 text-gray-700 font-medium w-12">
-                      <input
-                        type="checkbox"
-                        checked={
-                          selectedIds.size > 0 &&
-                          selectedIds.size ===
-                            songs.filter(
-                              (s) => !computeHealth(s).hasChordSheet
-                            ).length
-                        }
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            selectAll();
-                          } else {
-                            setSelectedIds(new Set());
-                          }
-                        }}
-                        className="w-4 h-4 rounded border-gray-300 text-gray-900"
-                      />
-                    </th>
-                  )}
                   <th className="px-3 py-2 text-gray-700 font-medium">
                     Title
                   </th>
@@ -465,7 +316,7 @@ export default function SongHealthPage() {
                 {filtered.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={canEditSong ? 8 : 7}
+                      colSpan={7}
                       className="p-6 text-center text-gray-500"
                     >
                       No songs
@@ -474,27 +325,9 @@ export default function SongHealthPage() {
                 ) : (
                   filtered.map((song) => {
                     const health = computeHealth(song);
-                    const isGenerating = generatingIds.has(song.id);
-                    const hasGenerated = generatedContent[song.id];
 
                     return (
                       <tr key={song.id} className="border-t border-gray-200">
-                        {canEditSong && !health.hasChordSheet && (
-                          <td className="px-3 py-3">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.has(song.id)}
-                              onChange={() => toggleSelect(song.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-gray-900"
-                            />
-                          </td>
-                        )}
-                        {canEditSong && health.hasChordSheet && (
-                          <td className="px-3 py-3" />
-                        )}
-                        {!canEditSong && (
-                          <td className="px-3 py-3" colSpan={1} />
-                        )}
                         <td className="px-3 py-3 font-medium text-gray-800">
                           {song.title}
                         </td>
@@ -547,35 +380,6 @@ export default function SongHealthPage() {
                         </td>
                         <td className="px-3 py-3">
                           <div className="flex gap-1">
-                            {canEditSong && !health.hasChordSheet && (
-                              <>
-                                {!hasGenerated && (
-                                  <button
-                                    disabled={isGenerating}
-                                    onClick={() => handleGenerate(song.id, song)}
-                                    className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                                  >
-                                    {isGenerating ? "Gen..." : "Gen"}
-                                  </button>
-                                )}
-                                {hasGenerated && (
-                                  <>
-                                    <button
-                                      onClick={() => setPreviewSongId(song.id)}
-                                      className="px-2 py-1 text-xs rounded border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
-                                    >
-                                      Preview
-                                    </button>
-                                    <button
-                                      onClick={() => handleDownload(song.id)}
-                                      className="px-2 py-1 text-xs rounded bg-gray-900 text-white hover:bg-gray-800"
-                                    >
-                                      DL
-                                    </button>
-                                  </>
-                                )}
-                              </>
-                            )}
                             {canEditSong && (
                               <a
                                 href={`/admin/songs?edit=${song.id}`}
@@ -666,60 +470,8 @@ export default function SongHealthPage() {
             </>
           )}
         </Card>
-
-        {/* Preview Modal */}
-        {previewSongId && generatedContent[previewSongId] && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] flex flex-col">
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Chord Preview — {songs.find((s) => s.id === previewSongId)?.title}
-                </h2>
-                <button
-                  onClick={() => setPreviewSongId(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                >
-                  ×
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="px-6 py-4 flex-1 overflow-y-auto">
-                <pre className="font-mono text-xs text-gray-700 whitespace-pre-wrap break-words bg-gray-50 p-4 rounded-lg">
-                  {generatedContent[previewSongId]}
-                </pre>
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-4 border-t border-gray-200 flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    setGeneratedContent((prev) => {
-                      const next = { ...prev };
-                      delete next[previewSongId];
-                      return next;
-                    });
-                    setPreviewSongId(null);
-                  }}
-                  className="px-4 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
-                >
-                  Discard
-                </button>
-                <button
-                  onClick={() => {
-                    handleDownload(previewSongId);
-                    setPreviewSongId(null);
-                  }}
-                  className="px-4 py-2 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-800"
-                >
-                  Download .docx
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
+    </>
   );
 }
