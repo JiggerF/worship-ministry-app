@@ -1,5 +1,6 @@
 
 "use client";
+import { Suspense } from "react";
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -61,7 +62,7 @@ const ITEMS_PER_PAGE = 20;
 
 const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 
-export default function AdminSongsPage() {
+function SongsPageContent() {
   const searchParams = useSearchParams();
   const { member, loading: memberLoading } = useCurrentMember();
   // canEditSong: can edit existing songs (Admin + Coordinator + MusicCoordinator)
@@ -493,6 +494,14 @@ export default function AdminSongsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminSongsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen p-6 flex items-center justify-center"><div className="text-gray-600">Loading...</div></div>}>
+      <SongsPageContent />
+    </Suspense>
   );
 }
 
