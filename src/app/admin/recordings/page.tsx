@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { SundayRecordingWithTeam } from "@/lib/types/database";
+import { ROLE_LABEL_MAP } from "@/lib/constants/roles";
+import type { MemberRole } from "@/lib/types/database";
 import { formatDuration } from "@/lib/utils/recordings";
 
 function useCurrentMember() {
@@ -121,13 +123,7 @@ export default function AdminRecordingsPage() {
     return () => { cancelled = true; };
   }, []);
 
-  async function handleUpload(payload: {
-    title: string;
-    sunday_date: string;
-    recording_type: "audio" | "video";
-    drive_url: string;
-    duration: string;
-  }) {
+  async function handleUpload(payload: RecordingFormValues) {
     if (isSaving) return;
     setIsSaving(true);
     setSaveError(null);
@@ -154,13 +150,7 @@ export default function AdminRecordingsPage() {
     }
   }
 
-  async function handleEdit(payload: {
-    title: string;
-    sunday_date: string;
-    recording_type: "audio" | "video";
-    drive_url: string;
-    duration: string;
-  }) {
+  async function handleEdit(payload: RecordingFormValues) {
     if (!editing || isEditing) return;
     setIsEditing(true);
     setEditError(null);
@@ -362,6 +352,7 @@ export default function AdminRecordingsPage() {
                 isSaving={isSaving}
                 onCancel={() => setIsUploadOpen(false)}
                 onSave={handleUpload}
+                fetchRosterOnDateChange
               />
             </div>
           </div>
@@ -392,6 +383,7 @@ export default function AdminRecordingsPage() {
                   drive_url: editing.drive_url,
                   duration: secondsToMMSS(editing.duration_seconds),
                 }}
+                initialMembers={editing.featured_members.map(({ name, instrument }) => ({ name, instrument }))}
                 submitLabel="Save Changes"
               />
             </div>
@@ -439,25 +431,37 @@ export default function AdminRecordingsPage() {
   );
 }
 
+interface LineupMember {
+  name: string;
+  instrument: string;
+}
+
 interface RecordingFormValues {
   title: string;
   sunday_date: string;
   recording_type: "audio" | "video";
   drive_url: string;
   duration: string;
+  featured_members_override: LineupMember[] | null;
 }
+
+const NON_MUSICIAN_ROLES = new Set(["sound", "setup"]);
 
 function RecordingForm({
   isSaving,
   onCancel,
   onSave,
   initialValues,
+  initialMembers,
+  fetchRosterOnDateChange = false,
   submitLabel = "Upload",
 }: {
   isSaving: boolean;
   onCancel: () => void;
   onSave: (p: RecordingFormValues) => void;
-  initialValues?: Partial<RecordingFormValues>;
+  initialValues?: Partial<Omit<RecordingFormValues, "featured_members_override">>;
+  initialMembers?: LineupMember[] | null;
+  fetchRosterOnDateChange?: boolean;
   submitLabel?: string;
 }) {
   const [title, setTitle] = useState(initialValues?.title ?? "");
@@ -465,6 +469,57 @@ function RecordingForm({
   const [recordingType, setRecordingType] = useState<"audio" | "video">(initialValues?.recording_type ?? "audio");
   const [driveUrl, setDriveUrl] = useState(initialValues?.drive_url ?? "");
   const [duration, setDuration] = useState(initialValues?.duration ?? "");
+
+  // Always show lineup editor; null = not yet loaded, [] = empty
+  const [lineup, setLineup] = useState<LineupMember[] | null>(
+    initialMembers !== undefined ? (initialMembers ?? []) : (fetchRosterOnDateChange ? [] : null)
+  );
+  const lastFetchedDate = useRef<string | null>(null);
+
+  // Auto-populate lineup from roster when date changes (Upload mode only)
+  useEffect(() => {
+    if (!fetchRosterOnDateChange || !sundayDate || sundayDate === lastFetchedDate.current) return;
+    lastFetchedDate.current = sundayDate;
+    const month = sundayDate.slice(0, 7); // YYYY-MM
+    fetch(`/api/roster?month=${month}`, { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((data: { assignments?: { date: string; role: { name: string } | null; member: { id: string; name: string } | null }[] } | null) => {
+        if (!data?.assignments) return;
+        const seen = new Set<string>();
+        const members: LineupMember[] = [];
+        for (const a of data.assignments) {
+          if (a.date !== sundayDate || !a.member || !a.role) continue;
+          if (NON_MUSICIAN_ROLES.has(a.role.name)) continue;
+          if (seen.has(a.member.id)) continue;
+          seen.add(a.member.id);
+          const roleKey = a.role.name as MemberRole;
+          members.push({ name: a.member.name, instrument: ROLE_LABEL_MAP[roleKey] ?? a.role.name });
+        }
+        setLineup(members);
+      })
+      .catch(() => { /* silently leave lineup as-is */ });
+  }, [sundayDate, fetchRosterOnDateChange]);
+
+  function updateMember(index: number, field: keyof LineupMember, value: string) {
+    setLineup((prev) => {
+      if (!prev) return prev;
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  }
+
+  function removeMember(index: number) {
+    setLineup((prev) => prev ? prev.filter((_, i) => i !== index) : prev);
+  }
+
+  function addMember() {
+    setLineup((prev) => prev ? [...prev, { name: "", instrument: "" }] : [{ name: "", instrument: "" }]);
+  }
+
+  const featured_members_override = lineup !== null
+    ? lineup.filter((m) => m.name.trim())
+    : null;
 
   return (
     <div className="space-y-4">
@@ -531,6 +586,48 @@ function RecordingForm({
         />
       </div>
 
+      {/* Lineup editor — only shown in Edit modal */}
+      {lineup !== null && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Musicians <span className="text-gray-400 font-normal">(overrides the roster lineup)</span>
+          </label>
+          <div className="space-y-2">
+            {lineup.map((m, i) => (
+              <div key={i} className="flex gap-2">
+                <input
+                  className="flex-1 border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="Name"
+                  value={m.name}
+                  onChange={(e) => updateMember(i, "name", e.target.value)}
+                />
+                <input
+                  className="w-36 border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900"
+                  placeholder="Instrument"
+                  value={m.instrument}
+                  onChange={(e) => updateMember(i, "instrument", e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeMember(i)}
+                  className="px-2 py-2 rounded-lg border border-red-300 text-xs text-red-600 bg-white hover:bg-red-50"
+                  aria-label="Remove"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={addMember}
+            className="mt-2 px-3 py-1.5 rounded-lg border border-gray-300 text-xs text-gray-700 bg-white hover:bg-gray-50"
+          >
+            + Add musician
+          </button>
+        </div>
+      )}
+
       {/* Footer */}
       <div className="flex justify-end gap-2 pt-1">
         <button
@@ -542,7 +639,7 @@ function RecordingForm({
         </button>
         <button
           disabled={isSaving || !title.trim() || !sundayDate || !driveUrl.trim()}
-          onClick={() => onSave({ title: title.trim(), sunday_date: sundayDate, recording_type: recordingType, drive_url: driveUrl.trim(), duration: duration.trim() })}
+          onClick={() => onSave({ title: title.trim(), sunday_date: sundayDate, recording_type: recordingType, drive_url: driveUrl.trim(), duration: duration.trim(), featured_members_override })}
           className="px-4 py-2 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isSaving ? "Saving…" : submitLabel}
