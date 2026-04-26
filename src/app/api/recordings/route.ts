@@ -38,6 +38,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const featured_members_override =
+    Array.isArray(body.featured_members_override) && body.featured_members_override.length > 0
+      ? body.featured_members_override
+      : null;
+
   try {
     const recording = await createRecording(actor.tenantId, {
       title: body.title,
@@ -46,6 +51,7 @@ export async function POST(req: NextRequest) {
       drive_url: body.drive_url,
       duration_seconds,
       uploaded_by: actor.id,
+      featured_members_override,
     });
     return NextResponse.json({ success: true, recording }, { status: 201 });
   } catch (err) {

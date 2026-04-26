@@ -69,10 +69,13 @@ export async function getRecordings(tenantId: string): Promise<SundayRecordingWi
     teamByDate.set(date, existing);
   }
 
-  return (recordings as SundayRecording[]).map((r) => ({
-    ...r,
-    featured_members: teamByDate.get(r.sunday_date) ?? [],
-  }));
+  return (recordings as (SundayRecording & { featured_members_override?: { name: string; instrument: string }[] | null })[]).map((r) => {
+    const override = r.featured_members_override;
+    const featured_members = (Array.isArray(override) && override.length > 0)
+      ? override.map((m, i) => ({ id: `override-${i}`, name: m.name, instrument: m.instrument }))
+      : (teamByDate.get(r.sunday_date) ?? []);
+    return { ...r, featured_members };
+  });
 }
 
 export interface CreateRecordingPayload {
@@ -82,6 +85,7 @@ export interface CreateRecordingPayload {
   drive_url: string;
   duration_seconds: number | null;
   uploaded_by: string | null;
+  featured_members_override?: { name: string; instrument: string }[] | null;
 }
 
 /**
@@ -107,6 +111,7 @@ export interface UpdateRecordingPayload {
   recording_type?: "audio" | "video";
   drive_url?: string;
   duration_seconds?: number | null;
+  featured_members_override?: { name: string; instrument: string }[] | null;
 }
 
 /**

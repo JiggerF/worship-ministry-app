@@ -40,6 +40,10 @@ export async function PATCH(
   if (body.recording_type === "audio" || body.recording_type === "video") payload.recording_type = body.recording_type;
   if (body.drive_url) payload.drive_url = body.drive_url;
   if (duration_seconds !== undefined) payload.duration_seconds = duration_seconds;
+  // null means "clear the override and revert to roster"; array means "use this lineup"
+  if ("featured_members_override" in body) {
+    payload.featured_members_override = body.featured_members_override ?? null;
+  }
 
   try {
     const recording = await updateRecording(actor.tenantId, id, payload);
