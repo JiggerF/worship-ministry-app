@@ -44,8 +44,8 @@ function computeHealth(song: SongWithCharts): HealthMetrics {
 
 export default function SongHealthPage() {
   const { member, loading: memberLoading } = useCurrentMember();
-  const canEditSong =
-    !memberLoading && member !== null && member.app_role !== "WorshipLeader";
+  // All admin roles (Admin, Coordinator, MusicCoordinator, WorshipLeader) can edit on Song Health
+  const canEditSong = !memberLoading && member !== null;
 
   const [songs, setSongs] = useState<SongWithCharts[]>([]);
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(true);

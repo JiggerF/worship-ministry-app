@@ -17,8 +17,8 @@ interface UpdateRequest {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth: Admin, Coordinator, MusicCoordinator can update (same as canEditSong)
-  const ALLOWED_ROLES = ["Admin", "Coordinator", "MusicCoordinator"];
+  // Auth: Admin, Coordinator, MusicCoordinator, WorshipLeader can update via Song Health
+  const ALLOWED_ROLES = ["Admin", "Coordinator", "MusicCoordinator", "WorshipLeader"];
   const actor = await getActorFromRequest(req);
   if (!actor || !ALLOWED_ROLES.includes(actor.role)) {
     return NextResponse.json({ error: "Not authorized to update chord sheets" }, { status: 403 });
