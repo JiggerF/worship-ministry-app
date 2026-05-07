@@ -110,7 +110,7 @@ describe("PATCH /api/songs/[id] — authorisation", () => {
     expect(res.status).toBe(200);
   });
 
-  it("returns 403 for WorshipLeader role", async () => {
+  it("allows WorshipLeader to edit songs (Song Health access)", async () => {
     mockGetActor.mockResolvedValue({ id: "wl-1", name: "Worship Leader", role: "WorshipLeader" });
     const req = makeNextRequest({
       method: "PATCH",
@@ -118,7 +118,7 @@ describe("PATCH /api/songs/[id] — authorisation", () => {
       body: { title: "Updated Song" },
     });
     const res = await PATCH(req, makeContext(SONG_ID));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(200);
   });
 
   it("returns 403 when unauthenticated (no actor)", async () => {

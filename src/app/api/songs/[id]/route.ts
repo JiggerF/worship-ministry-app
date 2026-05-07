@@ -14,8 +14,8 @@ const supabase = createClient(supabaseUrl, serviceKey);
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: RouteContext) {
-  // Admin, Coordinator, and MusicCoordinator can edit songs
-  const SONG_EDIT_ROLES = ["Admin", "Coordinator", "MusicCoordinator"];
+  // Admin, Coordinator, MusicCoordinator, and WorshipLeader can edit songs
+  const SONG_EDIT_ROLES = ["Admin", "Coordinator", "MusicCoordinator", "WorshipLeader"];
   const actor = await getActorFromRequest(req);
   if (!actor || !SONG_EDIT_ROLES.includes(actor.role)) {
     return NextResponse.json({ error: "Not authorized to edit songs" }, { status: 403 });
