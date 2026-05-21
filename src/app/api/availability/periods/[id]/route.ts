@@ -3,6 +3,7 @@ import { getActorFromRequest } from "@/lib/server/get-actor";
 import {
   getPeriodDetailWithAllMembers,
   closePeriod,
+  reopenPeriod,
   updatePeriod,
   deletePeriodIfEmpty,
   countResponsesForPeriod,
@@ -61,16 +62,21 @@ export async function PATCH(
   const { id } = await params;
   const body = await req.json().catch(() => null);
 
-  if (!body || body.action !== "close") {
+  if (!body || (body.action !== "close" && body.action !== "reopen")) {
     return NextResponse.json(
-      { error: 'Invalid request body. Expected { action: "close" }' },
+      { error: 'Invalid request body. Expected { action: "close" | "reopen" }' },
       { status: 400 }
     );
   }
 
   try {
-    await closePeriod(id);
-    return NextResponse.json({ closed: true });
+    if (body.action === "close") {
+      await closePeriod(id);
+      return NextResponse.json({ closed: true });
+    } else {
+      await reopenPeriod(id);
+      return NextResponse.json({ reopened: true });
+    }
   } catch (err: unknown) {
     const e = err as { message?: string };
     return NextResponse.json({ error: e?.message ?? String(err) }, { status: 500 });

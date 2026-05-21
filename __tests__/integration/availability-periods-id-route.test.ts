@@ -17,13 +17,15 @@ vi.mock("@/lib/server/get-actor", () => ({
 }));
 
 // ── Mock DB helpers ──
-const { mockGetPeriodDetail, mockClosePeriod } = vi.hoisted(() => ({
+const { mockGetPeriodDetail, mockClosePeriod, mockReopenPeriod } = vi.hoisted(() => ({
   mockGetPeriodDetail: vi.fn(),
   mockClosePeriod: vi.fn(),
+  mockReopenPeriod: vi.fn(),
 }));
 vi.mock("@/lib/db/availability-periods", () => ({
   getPeriodDetailWithAllMembers: mockGetPeriodDetail,
   closePeriod: mockClosePeriod,
+  reopenPeriod: mockReopenPeriod,
 }));
 
 const { GET, PATCH } = await import(
@@ -86,6 +88,7 @@ beforeEach(() => {
   mockGetActor.mockResolvedValue({ id: "admin-1", name: "Admin User", role: "Admin", tenantId: "00000000-0000-0000-0000-000000000001" });
   mockGetPeriodDetail.mockResolvedValue(MEMBER_DETAIL);
   mockClosePeriod.mockResolvedValue(undefined);
+  mockReopenPeriod.mockResolvedValue(undefined);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -196,7 +199,7 @@ describe("PATCH /api/availability/periods/[id]", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 400 when action is not 'close'", async () => {
+  it("returns 400 when action is an unrecognised value", async () => {
     const req = makeNextRequest({ method: "PATCH", body: { action: "open" } });
     const res = await PATCH(req, makeContext("p-001"));
     expect(res.status).toBe(400);
@@ -208,9 +211,54 @@ describe("PATCH /api/availability/periods/[id]", () => {
     expect(res.status).toBe(400);
   });
 
-  it("returns 500 when DB throws", async () => {
+  it("returns 500 when closePeriod DB throws", async () => {
     mockClosePeriod.mockRejectedValue(new Error("DB error"));
     const req = makeNextRequest({ method: "PATCH", body: { action: "close" } });
+    const res = await PATCH(req, makeContext("p-001"));
+    expect(res.status).toBe(500);
+  });
+
+  it("returns 200 with reopened: true for action 'reopen'", async () => {
+    const req = makeNextRequest({
+      method: "PATCH",
+      url: "http://localhost/api/availability/periods/p-001",
+      body: { action: "reopen" },
+    });
+    const res = await PATCH(req, makeContext("p-001"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.reopened).toBe(true);
+    expect(mockReopenPeriod).toHaveBeenCalledWith("p-001");
+    expect(mockClosePeriod).not.toHaveBeenCalled();
+  });
+
+  it("returns 200 reopen for Coordinator role", async () => {
+    mockGetActor.mockResolvedValue({ id: "c-1", role: "Coordinator" });
+    const req = makeNextRequest({ method: "PATCH", body: { action: "reopen" } });
+    const res = await PATCH(req, makeContext("p-001"));
+    expect(res.status).toBe(200);
+    expect(mockReopenPeriod).toHaveBeenCalledWith("p-001");
+  });
+
+  it("returns 401 for unauthenticated reopen", async () => {
+    mockGetActor.mockResolvedValue(null);
+    const req = makeNextRequest({ method: "PATCH", body: { action: "reopen" } });
+    const res = await PATCH(req, makeContext("p-001"));
+    expect(res.status).toBe(401);
+    expect(mockReopenPeriod).not.toHaveBeenCalled();
+  });
+
+  it("returns 403 for Musician reopen attempt", async () => {
+    mockGetActor.mockResolvedValue({ id: "m-1", role: "Musician" });
+    const req = makeNextRequest({ method: "PATCH", body: { action: "reopen" } });
+    const res = await PATCH(req, makeContext("p-001"));
+    expect(res.status).toBe(403);
+    expect(mockReopenPeriod).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when reopenPeriod DB throws", async () => {
+    mockReopenPeriod.mockRejectedValue(new Error("DB error"));
+    const req = makeNextRequest({ method: "PATCH", body: { action: "reopen" } });
     const res = await PATCH(req, makeContext("p-001"));
     expect(res.status).toBe(500);
   });

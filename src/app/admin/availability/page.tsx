@@ -99,6 +99,8 @@ export default function AdminAvailabilityPage() {
 
   // Delete busy state — holds the id currently being deleted
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Reopen busy state
+  const [reopeningId, setReopeningId] = useState<string | null>(null);
 
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -204,6 +206,33 @@ export default function AdminAvailabilityPage() {
       setSaveError("Network error — please try again");
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleReopenPeriod(period: PeriodWithCounts, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!window.confirm(`Reopen "${period.label}"? Musicians will be able to submit responses again.`)) return;
+    setReopeningId(period.id);
+    try {
+      const res = await fetch(`/api/availability/periods/${period.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reopen" }),
+      });
+      if (!res.ok) {
+        let err: { error?: string } | null = null;
+        try { err = await res.json(); } catch { /* ignore */ }
+        showToast(err?.error ?? "Failed to reopen", "error");
+        return;
+      }
+      const updated = await fetch("/api/availability/periods").then((r) => r.json()).catch(() => []);
+      setPeriods(updated);
+      showToast(`"${period.label}" reopened`);
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setReopeningId(null);
     }
   }
 
@@ -413,10 +442,10 @@ export default function AdminAvailabilityPage() {
                       </p>
                       <p className="text-xs text-gray-400">responded</p>
                     </div>
-                    {/* Deadline */}
+                    {/* Deadline — hide overdue/due label once all members have responded */}
                     {period.deadline && (
                       <div>
-                        <p className={`text-xs font-medium ${dl?.color ?? "text-gray-500"}`}>{dl?.label}</p>
+                        {!allResponded && <p className={`text-xs font-medium ${dl?.color ?? "text-gray-500"}`}>{dl?.label}</p>}
                         <p className="text-xs text-gray-400">{formatDate(period.deadline)}</p>
                       </div>
                     )}
@@ -432,6 +461,15 @@ export default function AdminAvailabilityPage() {
                         >
                           Edit
                         </button>
+                        {isClosed && (
+                          <button
+                            onClick={(e) => handleReopenPeriod(period, e)}
+                            disabled={reopeningId === period.id}
+                            className="px-2.5 py-1 rounded-lg border border-blue-300 text-xs text-blue-700 bg-white hover:bg-blue-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {reopeningId === period.id ? "…" : "Reopen"}
+                          </button>
+                        )}
                         {responded === 0 && (
                           <button
                             onClick={(e) => handleDeletePeriod(period, e)}

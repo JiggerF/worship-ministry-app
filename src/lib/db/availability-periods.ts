@@ -115,6 +115,15 @@ export async function closePeriod(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function reopenPeriod(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("availability_periods")
+    .update({ closed_at: null })
+    .eq("id", id);
+
+  if (error) throw error;
+}
+
 export interface UpdatePeriodPayload {
   label: string;
   starts_on?: string; // omit to leave unchanged (dates are locked once responses exist)
