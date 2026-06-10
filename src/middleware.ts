@@ -545,16 +545,16 @@ export async function middleware(request: NextRequest) {
       // Block write-action URL patterns on songs
       // Coordinator has full songs access (add/edit/delete) — skip song blocks
       // MusicCoordinator can edit songs but not add/delete
-      // WorshipLeader is fully blocked from song write actions
+      // WorshipLeader can edit songs but not add/delete
       if (path.startsWith("/admin/songs") && effectiveRole !== "Coordinator") {
-        const isMusicCoordinator = effectiveRole === "MusicCoordinator";
-        if (isMusicCoordinator && /add|delete/.test(path)) {
+        const canOnlyEdit = effectiveRole === "MusicCoordinator" || effectiveRole === "WorshipLeader";
+        if (canOnlyEdit && /add|delete/.test(path)) {
           const redirectUrl = request.nextUrl.clone();
           redirectUrl.pathname = path.replace(/(add|delete).*/, "");
           redirectUrl.searchParams.set("reason", "readonly");
           return NextResponse.redirect(redirectUrl);
         }
-        if (!isMusicCoordinator && /add|edit|delete/.test(path)) {
+        if (!canOnlyEdit && /add|edit|delete/.test(path)) {
           const redirectUrl = request.nextUrl.clone();
           redirectUrl.pathname = path.replace(/(add|edit|delete).*/, "");
           redirectUrl.searchParams.set("reason", "readonly");

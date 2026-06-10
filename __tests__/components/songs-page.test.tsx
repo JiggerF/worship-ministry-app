@@ -7,7 +7,7 @@
  * - Admin: sees + Add Song, Edit, Delete
  * - Coordinator: sees + Add Song, Edit, Delete (full songs access)
  * - MusicCoordinator: sees Edit only (no Add, no Delete)
- * - WorshipLeader: sees no action buttons (fully read-only)
+ * - WorshipLeader: sees Edit only (no Add, no Delete) — can update chord URLs
  */
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -116,16 +116,17 @@ describe("AdminSongsPage — role-based button visibility", () => {
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
-  it("WorshipLeader sees no action buttons (fully read-only)", async () => {
+  it("WorshipLeader sees Edit button but NOT Add Song or Delete", async () => {
     vi.stubGlobal("fetch", makeFetch(WORSHIP_LEADER_MEMBER));
     render(<AdminSongsPage />);
 
     // Wait for songs to load
     await screen.findByText("Amazing Grace");
 
-    // None of the action buttons should be visible
+    // Edit button should be visible (WorshipLeader can update chord URLs etc.)
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
+    // Add Song and Delete should NOT exist
     expect(screen.queryByRole("button", { name: "+ Add Song" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
