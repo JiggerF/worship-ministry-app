@@ -65,9 +65,8 @@ const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 function SongsPageContent() {
   const searchParams = useSearchParams();
   const { member, loading: memberLoading } = useCurrentMember();
-  // canEditSong: can edit existing songs (Admin + Coordinator + MusicCoordinator)
-  const canEditSong = !memberLoading && member !== null &&
-    member.app_role !== "WorshipLeader";
+  // canEditSong: can edit existing songs (Admin + Coordinator + MusicCoordinator + WorshipLeader)
+  const canEditSong = !memberLoading && member !== null;
   // canAddDeleteSong: can add new or delete songs (Admin + Coordinator)
   const canAddDeleteSong = !memberLoading && member !== null &&
     member.app_role !== "WorshipLeader" &&

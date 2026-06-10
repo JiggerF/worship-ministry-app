@@ -92,7 +92,7 @@ describe("Journey: Role-based access on Songs page", () => {
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
-  it("WorshipLeader: sees no action buttons (fully read-only)", async () => {
+  it("WorshipLeader: sees Edit button but NOT Add Song or Delete", async () => {
     vi.stubGlobal(
       "fetch",
       makeFetch(WORSHIP_LEADER_MEMBER, { "/api/songs": ONE_SONG })
@@ -101,10 +101,11 @@ describe("Journey: Role-based access on Songs page", () => {
 
     await screen.findByText("Amazing Grace");
 
+    // WorshipLeader can edit songs (e.g. update chord URLs)
+    expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "+ Add Song" })
     ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 
