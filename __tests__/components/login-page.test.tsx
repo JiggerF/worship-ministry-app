@@ -226,4 +226,103 @@ describe("AdminLoginForm — form submission", () => {
       expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled();
     });
   });
+
+  // Gap: the success test only asserted router.replace(). The component calls both
+  // router.replace() AND router.refresh() so that Next.js SSR re-evaluates the
+  // auth session on the next page load. If refresh() were silently removed the
+  // redirect would still pass but stale middleware/SSR state would persist.
+  it("calls router.refresh() after a successful login", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetchOk());
+
+    render(<AdminLoginForm orgName="Worship Ministry" />);
+
+    await user.type(screen.getByPlaceholderText("admin@wcc.org"), "admin@wcc.org");
+    await user.type(screen.getByPlaceholderText("Enter password"), "pass");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => {
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Gap: the `if (loading) return;` guard in handleSubmit was untested. Without
+  // this guard a slow network + impatient user could fire duplicate POST requests,
+  // creating duplicate audit log events or triggering a second session cookie
+  // write mid-flight.
+  it("does not fire a second fetch when the button is clicked while already submitting", async () => {
+    const user = userEvent.setup();
+    // First call never resolves — simulates an in-flight request
+    const fetchMock = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AdminLoginForm orgName="Worship Ministry" />);
+
+    await user.type(screen.getByPlaceholderText("admin@wcc.org"), "a@b.com");
+    await user.type(screen.getByPlaceholderText("Enter password"), "pass");
+
+    // First click — starts the in-flight request
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+    // Wait until the button is in loading state before clicking again
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /signing in/i })).toBeDisabled()
+    );
+
+    // Second click on the disabled button — the guard should prevent a second fetch
+    await user.click(screen.getByRole("button", { name: /signing in/i }));
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // Gap: `setError(null)` at the top of handleSubmit was untested. If that line
+  // were accidentally removed, a stale error banner from a previous failed attempt
+  // would remain visible during and after a successful retry — misleading the user
+  // into thinking the second attempt also failed.
+  it("clears a previous error message when the user retries", async () => {
+    const user = userEvent.setup();
+
+    // First attempt fails
+    vi.stubGlobal("fetch", makeFetchFail("Invalid email or password"));
+
+    render(<AdminLoginForm orgName="Worship Ministry" />);
+
+    await user.type(screen.getByPlaceholderText("admin@wcc.org"), "bad@wcc.org");
+    await user.type(screen.getByPlaceholderText("Enter password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Invalid email or password")).toBeInTheDocument();
+    });
+
+    // Second attempt succeeds — error should disappear
+    vi.stubGlobal("fetch", makeFetchOk());
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Invalid email or password")).not.toBeInTheDocument();
+    });
+  });
+
+  // Gap: existing submission tests only verified the request URL. The API route
+  // reads email and password from the JSON body to authenticate against Supabase.
+  // A regression that inadvertently omits or misspells those keys would produce a
+  // silent authentication failure that URL-only assertions would never catch.
+  it("sends the typed email and password in the POST request body", async () => {
+    const user = userEvent.setup();
+    const fetchMock = makeFetchOk();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AdminLoginForm orgName="Worship Ministry" />);
+
+    await user.type(screen.getByPlaceholderText("admin@wcc.org"), "leader@wcc.org");
+    await user.type(screen.getByPlaceholderText("Enter password"), "s3cret!");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    await waitFor(() => {
+      const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+      const body = JSON.parse(options.body as string) as { email: string; password: string };
+      expect(body.email).toBe("leader@wcc.org");
+      expect(body.password).toBe("s3cret!");
+    });
+  });
 });
