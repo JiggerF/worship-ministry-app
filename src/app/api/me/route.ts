@@ -5,6 +5,7 @@ import { getTenantId, isMultiTenantEnabled, WCC_TENANT_ID } from "@/lib/server/t
 import { getEnabledFeatures } from "@/lib/server/feature-flags";
 import { createClient } from "@supabase/supabase-js";
 import { getPermissionsForRole, type PermissionOverrides } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 
 export async function GET(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -86,7 +87,7 @@ export async function GET(req: NextRequest) {
     // If the user is NOT a member of the resolved tenant, return 403 immediately —
     // this is the API-layer tenant boundary enforcement that prevents cross-tenant
     // data leakage even if middleware were somehow bypassed.
-    let appRole = member.app_role;
+    let appRole: AppRole | null = member.app_role as AppRole | null;
     let permissionOverrides: PermissionOverrides | null = null;
     if (isMultiTenantEnabled()) {
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
             { status: 403 }
           );
         }
-        appRole = orgMember.app_role;
+        appRole = orgMember.app_role as AppRole;
         permissionOverrides = orgMember.permission_overrides ?? null;
       }
     } else {
