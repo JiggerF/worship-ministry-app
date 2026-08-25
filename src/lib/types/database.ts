@@ -65,6 +65,7 @@ export interface OrganizationMember {
   app_role: AppRole;
   is_active: boolean;
   joined_at: string;
+  permission_overrides?: Record<string, string[]> | null;
 }
 
 export interface FeatureFlag {
@@ -106,6 +107,7 @@ export interface Member {
   magic_token: string;
   is_active: boolean;
   created_at: string;
+  permission_overrides?: Record<string, string[]> | null;
 }
 
 export interface Role {
@@ -220,6 +222,12 @@ export interface MeResponse extends Omit<Member, "app_role"> {
   tenant_name: string | null;
   /** Enabled feature flag keys for the current tenant. Undefined in single-tenant mode. */
   features?: string[];
+  /**
+   * Computed permissions: role defaults merged with per-user overrides.
+   * Shape: { resource: ["view", "write", "delete"] }
+   * Clients should use this instead of deriving permissions from app_role.
+   */
+  permissions: Record<string, string[]>;
 }
 
 // ─────────────────────────────────────────────

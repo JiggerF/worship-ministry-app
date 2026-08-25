@@ -4,6 +4,7 @@ import { getMemberByEmail } from "@/lib/db/members";
 import { getTenantId, isMultiTenantEnabled, WCC_TENANT_ID } from "@/lib/server/tenant";
 import { getEnabledFeatures } from "@/lib/server/feature-flags";
 import { createClient } from "@supabase/supabase-js";
+import { getPermissionsForRole, type PermissionOverrides } from "@/lib/permissions";
 
 export async function GET(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -86,6 +87,7 @@ export async function GET(req: NextRequest) {
     // this is the API-layer tenant boundary enforcement that prevents cross-tenant
     // data leakage even if middleware were somehow bypassed.
     let appRole = member.app_role;
+    let permissionOverrides: PermissionOverrides | null = null;
     if (isMultiTenantEnabled()) {
       const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
       const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -93,7 +95,7 @@ export async function GET(req: NextRequest) {
         const serviceClient = createClient(supabaseUrl, serviceKey);
         const { data: orgMember } = await serviceClient
           .from("organization_members")
-          .select("app_role, is_active")
+          .select("app_role, is_active, permission_overrides")
           .eq("member_id", member.id)
           .eq("organization_id", tenantId)
           .maybeSingle();
@@ -105,7 +107,11 @@ export async function GET(req: NextRequest) {
           );
         }
         appRole = orgMember.app_role;
+        permissionOverrides = orgMember.permission_overrides ?? null;
       }
+    } else {
+      // Single-tenant: read overrides from members table
+      permissionOverrides = (member.permission_overrides as PermissionOverrides | undefined) ?? null;
     }
 
     // Resolve tenant name
@@ -127,12 +133,15 @@ export async function GET(req: NextRequest) {
     // Get enabled features for this tenant
     const features = await getEnabledFeatures(tenantId).catch(() => [] as string[]);
 
+    const permissions = getPermissionsForRole(appRole, permissionOverrides);
+
     const responseBody = {
       ...member,
       app_role: appRole,
       tenant_id: tenantId,
       tenant_name: tenantName,
       features,
+      permissions,
     };
 
     const res = NextResponse.json(responseBody);

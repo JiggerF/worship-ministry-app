@@ -18,6 +18,7 @@ interface MemberRow {
   magic_token: string;
   is_active: boolean;
   created_at: string;
+  permission_overrides?: Record<string, string[]> | null;
   member_role_assignments?: MemberAssignmentRow[];
 }
 
@@ -310,7 +311,7 @@ export async function getMember(tenantId: string, id: string) {
 export async function getMemberByEmail(email: string) {
   const { data, error } = await supabase
     .from("members")
-    .select("id, name, email, phone, app_role, magic_token, is_active, created_at")
+    .select("id, name, email, phone, app_role, magic_token, is_active, created_at, permission_overrides")
     .eq("email", email)
     .single();
 
@@ -395,6 +396,7 @@ interface MemberRow {
   magic_token: string;
   is_active: boolean;
   created_at: string;
+  permission_overrides?: Record<string, string[]> | null;
   member_role_assignments?: MemberAssignmentRow[];
 }
 

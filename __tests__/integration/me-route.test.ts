@@ -81,7 +81,7 @@ beforeEach(() => {
   let fromCount = 0;
   mockFrom.mockImplementation(() => {
     fromCount++;
-    if (fromCount === 1) return makeChain({ app_role: "Admin", is_active: true }); // org_members
+    if (fromCount === 1) return makeChain({ app_role: "Admin", is_active: true, permission_overrides: null }); // org_members
     return makeChain({ name: "WCC Worship" });                                     // organizations
   });
 });
@@ -101,6 +101,10 @@ describe("GET /api/me", () => {
 
       expect(res.status).toBe(200);
       expect(body).toMatchObject({ id: "member-1", email: "alice@example.com" });
+      expect(body).toHaveProperty("permissions");
+      // Admin should have all actions on all resources
+      expect(body.permissions.people).toEqual(expect.arrayContaining(["view", "write", "delete"]));
+      expect(body.permissions.songs).toEqual(expect.arrayContaining(["view", "write", "delete"]));
       expect(mockGetMemberByEmail).toHaveBeenCalledWith("alice@example.com");
     });
   });
