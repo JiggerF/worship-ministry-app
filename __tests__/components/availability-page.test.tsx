@@ -429,7 +429,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Reopen" }));
 
     const patchCall = (fetchMock as ReturnType<typeof vi.fn>).mock.calls.find(
-      ([, o]: [string, RequestInit?]) => o?.method === "PATCH"
+      ([, o]) => (o as RequestInit | undefined)?.method === "PATCH"
     );
     expect(patchCall).toBeUndefined();
   });

@@ -128,7 +128,7 @@ describe("PlatformLoginPage — platform admin check failure", () => {
     // Verify logout was never called — re-introducing this call would lock a
     // church admin out of /admin/* by destroying their active Supabase session.
     const logoutCalls = fetchMock.mock.calls.filter(
-      ([url]: [string]) => url === "/api/auth/logout"
+      ([url]) => url === "/api/auth/logout"
     );
     expect(logoutCalls).toHaveLength(0);
   });
