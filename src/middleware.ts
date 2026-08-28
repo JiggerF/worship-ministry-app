@@ -1,6 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { WCC_TENANT_ID, isMultiTenantEnabled } from "@/lib/server/tenant";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Cookie helpers
@@ -515,51 +517,44 @@ export async function middleware(request: NextRequest) {
       effectiveRole = orgMember.app_role;
     }
 
-    // Route restrictions for Coordinator, WorshipLeader, and MusicCoordinator
-    // Use effectiveRole (per-tenant in multi-tenant mode, global in single-tenant).
-    const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as const;
-    if (RESTRICTED_ROLES.includes(effectiveRole as typeof RESTRICTED_ROLES[number])) {
-      const path = request.nextUrl.pathname;
+    // Route restrictions based on centralized permission map
+    const role = effectiveRole as AppRole;
+    const path = request.nextUrl.pathname;
 
-      // Block /admin/settings for all restricted roles
-      if (path.startsWith("/admin/settings")) {
+    // Block /admin/settings if role lacks settings view
+    if (path.startsWith("/admin/settings") && !hasPermission(role, "settings", "view")) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/admin/roster";
+      redirectUrl.searchParams.set("reason", "no_settings_access");
+      return NextResponse.redirect(redirectUrl);
+    }
+    // Block /admin/audit if role lacks audit view
+    if (path.startsWith("/admin/audit") && !hasPermission(role, "audit", "view")) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/admin/roster";
+      redirectUrl.searchParams.set("reason", "no_audit_access");
+      return NextResponse.redirect(redirectUrl);
+    }
+    // Block write-action URL patterns on people
+    if (path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path) && !hasPermission(role, "people", "write")) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = path.replace(/(add|edit|delete|deactivate).*/, "");
+      redirectUrl.searchParams.set("reason", "readonly");
+      return NextResponse.redirect(redirectUrl);
+    }
+    // Block write-action URL patterns on songs
+    if (path.startsWith("/admin/songs")) {
+      if (/add|delete/.test(path) && !hasPermission(role, "songs", "delete")) {
         const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = "/admin/roster";
-        redirectUrl.searchParams.set("reason", "no_settings_access");
-        return NextResponse.redirect(redirectUrl);
-      }
-      // Block /admin/audit for all restricted roles
-      if (path.startsWith("/admin/audit")) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = "/admin/roster";
-        redirectUrl.searchParams.set("reason", "no_audit_access");
-        return NextResponse.redirect(redirectUrl);
-      }
-      // Block write-action URL patterns on people
-      if (path.startsWith("/admin/people") && /add|edit|delete|deactivate/.test(path)) {
-        const redirectUrl = request.nextUrl.clone();
-        redirectUrl.pathname = path.replace(/(add|edit|delete|deactivate).*/, "");
+        redirectUrl.pathname = path.replace(/(add|delete).*/, "");
         redirectUrl.searchParams.set("reason", "readonly");
         return NextResponse.redirect(redirectUrl);
       }
-      // Block write-action URL patterns on songs
-      // Coordinator has full songs access (add/edit/delete) — skip song blocks
-      // MusicCoordinator can edit songs but not add/delete
-      // WorshipLeader can edit songs but not add/delete
-      if (path.startsWith("/admin/songs") && effectiveRole !== "Coordinator") {
-        const canOnlyEdit = effectiveRole === "MusicCoordinator" || effectiveRole === "WorshipLeader";
-        if (canOnlyEdit && /add|delete/.test(path)) {
-          const redirectUrl = request.nextUrl.clone();
-          redirectUrl.pathname = path.replace(/(add|delete).*/, "");
-          redirectUrl.searchParams.set("reason", "readonly");
-          return NextResponse.redirect(redirectUrl);
-        }
-        if (!canOnlyEdit && /add|edit|delete/.test(path)) {
-          const redirectUrl = request.nextUrl.clone();
-          redirectUrl.pathname = path.replace(/(add|edit|delete).*/, "");
-          redirectUrl.searchParams.set("reason", "readonly");
-          return NextResponse.redirect(redirectUrl);
-        }
+      if (/edit/.test(path) && !hasPermission(role, "songs", "write")) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = path.replace(/edit.*/, "");
+        redirectUrl.searchParams.set("reason", "readonly");
+        return NextResponse.redirect(redirectUrl);
       }
     }
   }

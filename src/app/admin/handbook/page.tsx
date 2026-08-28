@@ -7,11 +7,13 @@ import remarkGfm from "remark-gfm";
 import type { AppRole, Member } from "@/lib/types/database";
 import type { HandbookDocument, ChangeType } from "@/lib/types/handbook";
 import { versionLabel } from "@/lib/types/handbook";
+import type { Permissions } from "@/lib/permissions";
 
 // ─── Auth hook ────────────────────────────────────────────────────────────────
 
 function useCurrentMember() {
   const [member, setMember] = useState<Member | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -20,6 +22,7 @@ function useCurrentMember() {
       .then((d) => {
         if (!cancelled) {
           setMember(d ?? null);
+          setPermissions(d?.permissions ?? null);
           setLoading(false);
         }
       })
@@ -30,7 +33,7 @@ function useCurrentMember() {
       cancelled = true;
     };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 // ─── Handbook permissions hook ────────────────────────────────────────────────
@@ -269,14 +272,14 @@ const MD_COMPONENTS: Components = {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HandbookPage() {
-  const { member, loading: memberLoading } = useCurrentMember();
-  const { editorRoles, editorMemberIds, loading: permsLoading } = useHandbookPermissions();
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
+  const { editorMemberIds, loading: permsLoading } = useHandbookPermissions();
 
   const canEdit =
     !memberLoading &&
     !permsLoading &&
     member !== null &&
-    (editorRoles.includes(member.app_role) || editorMemberIds.includes(member.id));
+    (!!permissions?.handbook?.includes("write") || editorMemberIds.includes(member.id));
 
   // ── Router + unsaved-changes guard ──
   const router = useRouter();

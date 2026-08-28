@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
 import type { MemberWithRoles, MemberRole, AppRole } from "@/lib/types/database";
+import type { Permissions } from "@/lib/permissions";
 
 // Define MemberFormData type
 interface MemberFormData {
@@ -15,17 +16,16 @@ interface MemberFormData {
 
 function useCurrentMember() {
   const [member, setMember] = useState<MemberWithRoles | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
-    // Use the server-side /api/me endpoint which reads the session from cookies
-    // cache: "no-store" prevents stale identity after a login switch.
-    // and queries members via service role key — works regardless of RLS policies.
     fetch("/api/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
@@ -36,23 +36,21 @@ function useCurrentMember() {
       cancelled = true;
     };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 export default function AdminPeoplePage() {
-  const { member, loading: memberLoading } = useCurrentMember();
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
   // Hide action buttons while loading (member is null) AND when role lacks edit permission.
   // Defaulting to hidden prevents a flash of edit buttons before the role is confirmed.
   const canEdit = !memberLoading && member !== null &&
-    member.app_role !== "Coordinator" &&
-    member.app_role !== "WorshipLeader" &&
-    member.app_role !== "MusicCoordinator";
+    !!permissions?.people?.includes("write");
   // Initialize empty when not in mock mode — avoids the mock-data flash on load
   const [members, setMembers] = useState<MemberWithRoles[]>([]);
 
-  // Filter out Admin users for Coordinator, WorshipLeader, and MusicCoordinator
-  const READ_ONLY_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"];
-  const filteredMembers = member && READ_ONLY_ROLES.includes(member.app_role)
+  // Filter out Admin users for users who only have view access to people
+  const hasDeletePeople = !!permissions?.people?.includes("delete");
+  const filteredMembers = member && !hasDeletePeople
     ? members.filter((m) => m.app_role !== "Admin")
     : members;
 

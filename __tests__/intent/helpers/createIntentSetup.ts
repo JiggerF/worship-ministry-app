@@ -5,12 +5,13 @@
  * do not invent new patterns here.
  */
 import { vi } from "vitest";
+import { withPermissions } from "../../helpers/mockPermissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Member fixtures — one per AppRole
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ADMIN_MEMBER = {
+export const ADMIN_MEMBER = withPermissions({
   id: "admin-1",
   name: "Test Admin",
   email: "admin@wcc.org",
@@ -20,43 +21,43 @@ export const ADMIN_MEMBER = {
   is_active: true,
   created_at: "2026-01-01T00:00:00Z",
   roles: [],
-};
+});
 
-export const COORDINATOR_MEMBER = {
+export const COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "coord-1",
   name: "Test Coordinator",
   email: "coord@wcc.org",
   app_role: "Coordinator",
   magic_token: "token-coord",
-};
+});
 
-export const MUSIC_COORDINATOR_MEMBER = {
+export const MUSIC_COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "mc-1",
   name: "Music Coordinator",
   email: "mc@wcc.org",
   app_role: "MusicCoordinator",
   magic_token: "token-mc",
-};
+});
 
-export const WORSHIP_LEADER_MEMBER = {
+export const WORSHIP_LEADER_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "wl-1",
   name: "Worship Leader",
   email: "wl@wcc.org",
   app_role: "WorshipLeader",
   magic_token: "token-wl",
-};
+});
 
-export const MUSICIAN_MEMBER = {
+export const MUSICIAN_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "musician-1",
   name: "Test Musician",
   email: "musician@wcc.org",
   app_role: "Musician",
   magic_token: "token-musician",
-};
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Generic mock data

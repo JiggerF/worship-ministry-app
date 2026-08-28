@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import { getAuditLog } from "@/lib/db/audit-log";
 
 export async function GET(req: NextRequest) {
   const actor = await getActorFromRequest(req);
-  if (!actor || actor.role !== "Admin") {
+  if (!actor || !hasPermission(actor.role as AppRole, "audit", "view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

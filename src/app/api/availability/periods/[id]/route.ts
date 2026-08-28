@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import {
   getPeriodDetailWithAllMembers,
   closePeriod,
@@ -12,7 +14,7 @@ import {
 /**
  * GET /api/availability/periods/[id]
  * Returns the period + all active musicians with their responses.
- * Requires Admin or Coordinator.
+ * Requires availability view permission.
  */
 export async function GET(
   req: NextRequest,
@@ -22,7 +24,7 @@ export async function GET(
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -55,7 +57,7 @@ export async function PATCH(
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "write")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -94,7 +96,7 @@ export async function PUT(
 ) {
   const actor = await getActorFromRequest(req);
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "write")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -147,7 +149,7 @@ export async function DELETE(
 ) {
   const actor = await getActorFromRequest(req);
   if (!actor) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "write")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

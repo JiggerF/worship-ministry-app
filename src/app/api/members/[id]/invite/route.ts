@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -9,8 +11,8 @@ export async function POST(req: NextRequest, ctx: RouteContext) {
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role === "Coordinator") {
-    return NextResponse.json({ error: "Coordinator cannot send invites" }, { status: 403 });
+  if (!hasPermission(actor.role as AppRole, "people", "write")) {
+    return NextResponse.json({ error: "Not authorized to send invites" }, { status: 403 });
   }
 
   const { id } = await ctx.params;

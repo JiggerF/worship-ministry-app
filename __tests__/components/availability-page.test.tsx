@@ -8,6 +8,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminAvailabilityPage from "@/app/admin/availability/page";
+import { withPermissions } from "../helpers/mockPermissions";
 
 // ── Mock next/navigation ──────────────────────────────────────────────────────
 vi.mock("next/navigation", () => ({
@@ -19,33 +20,33 @@ vi.mock("next/navigation", () => ({
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_MEMBER = {
+const ADMIN_MEMBER = withPermissions({
   id: "admin-1",
   name: "Test Admin",
   email: "admin@wcc.org",
   app_role: "Admin",
-};
+});
 
-const COORDINATOR_MEMBER = {
+const COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "coord-1",
   name: "Test Coordinator",
   app_role: "Coordinator",
-};
+});
 
-const WORSHIP_LEADER_MEMBER = {
+const WORSHIP_LEADER_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "wl-1",
   name: "Test Worship Leader",
   app_role: "WorshipLeader",
-};
+});
 
-const MUSIC_COORDINATOR_MEMBER = {
+const MUSIC_COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "mc-1",
   name: "Test Music Coordinator",
   app_role: "MusicCoordinator",
-};
+});
 
 const PERIOD_OPEN = {
   id: "p-001",

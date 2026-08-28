@@ -34,6 +34,9 @@ export type Action = "view" | "write" | "delete";
  */
 export type PermissionOverrides = Partial<Record<Resource, Action[]>>;
 
+/** Computed permissions object returned by /api/me. */
+export type Permissions = Record<Resource, Action[]>;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,7 +93,7 @@ const PERMISSION_MAP: Record<AppRole, Partial<Record<Resource, Action[]>>> = {
     people: ["view"],
     songs: ["view", "write"],
     roster: ["view"],
-    setlist: ["view", "write"],
+    setlist: ["view"],
     availability: ["view"],
     recordings: ["view"],
     handbook: ["view"],
