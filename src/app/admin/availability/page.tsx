@@ -404,6 +404,8 @@ export default function AdminAvailabilityPage() {
         <div className="space-y-3">
           {periods.map((period) => {
             const isClosed = !!period.closed_at;
+            const todayIso = new Date().toISOString().slice(0, 10);
+            const isPast = isClosed && period.ends_on < todayIso;
             const responded = period.response_count;
             const total = period.total_musicians;
             const allResponded = responded >= total && total > 0;
@@ -414,12 +416,12 @@ export default function AdminAvailabilityPage() {
               <div
                 key={period.id}
                 onClick={() => router.push(`/admin/availability/${period.id}`)}
-                className="bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer"
+                className={`border border-gray-200 rounded-xl p-4 hover:border-gray-300 hover:shadow-sm transition-all cursor-pointer ${isPast ? "bg-gray-50" : "bg-white"}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold text-gray-900">{period.label}</span>
+                      <span className={`text-sm font-semibold ${isPast ? "text-gray-400" : "text-gray-900"}`}>{period.label}</span>
                       {isClosed ? (
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Closed</span>
                       ) : (
@@ -429,7 +431,7 @@ export default function AdminAvailabilityPage() {
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">All responded</span>
                       )}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className={`text-xs mt-0.5 ${isPast ? "text-gray-400" : "text-gray-500"}`}>
                       {formatDate(period.starts_on)} – {formatDate(period.ends_on)}
                     </p>
                   </div>
@@ -437,7 +439,7 @@ export default function AdminAvailabilityPage() {
                   <div className="flex items-center gap-4 shrink-0 text-right">
                     {/* Response count */}
                     <div>
-                      <p className={`text-sm font-semibold ${allResponded ? "text-green-700" : "text-gray-900"}`}>
+                      <p className={`text-sm font-semibold ${isPast ? "text-gray-400" : allResponded ? "text-green-700" : "text-gray-900"}`}>
                         {responded} / {total}
                       </p>
                       <p className="text-xs text-gray-400">responded</p>
@@ -488,7 +490,7 @@ export default function AdminAvailabilityPage() {
                 {total > 0 && (
                   <div className="mt-3 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                     <div
-                      className="h-full rounded-full bg-green-500 transition-all"
+                      className={`h-full rounded-full transition-all ${isPast ? "bg-gray-300" : "bg-green-500"}`}
                       style={{ width: `${Math.min(100, (responded / total) * 100)}%` }}
                     />
                   </div>
