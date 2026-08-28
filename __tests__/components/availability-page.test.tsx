@@ -63,8 +63,10 @@ const PERIOD_OPEN = {
 const PERIOD_CLOSED = {
   ...PERIOD_OPEN,
   id: "p-002",
-  label: "Feb–Mar 2026",
-  closed_at: "2026-02-01T00:00:00Z",
+  label: "Sep–Oct 2026",
+  starts_on: "2026-09-06",
+  ends_on: "2026-10-25",
+  closed_at: "2026-08-28T00:00:00Z",
   response_count: 8,
 };
 
@@ -118,7 +120,7 @@ describe("AdminAvailabilityPage — page structure", () => {
     render(<AdminAvailabilityPage />);
     // Label appears in both the status card and the period row — use findAllByText
     expect(await screen.findAllByText("April\u2013May 2026")).not.toHaveLength(0);
-    expect(screen.getAllByText("Feb\u2013Mar 2026")).not.toHaveLength(0);
+    expect(screen.getAllByText("Sep\u2013Oct 2026")).not.toHaveLength(0);
   });
 
   it("shows Open badge for open period and Closed badge for closed period", async () => {
@@ -307,7 +309,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
   it("shows Reopen button for Admin on a closed period", async () => {
     vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, [PERIOD_CLOSED]));
     render(<AdminAvailabilityPage />);
-    await screen.findAllByText("Feb–Mar 2026");
+    await screen.findAllByText("Sep–Oct 2026");
     expect(screen.getByRole("button", { name: "Reopen" })).toBeInTheDocument();
   });
 
@@ -321,7 +323,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
   it("shows both Reopen and Edit buttons for a closed period when Admin", async () => {
     vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, [PERIOD_CLOSED]));
     render(<AdminAvailabilityPage />);
-    await screen.findAllByText("Feb–Mar 2026");
+    await screen.findAllByText("Sep–Oct 2026");
     expect(screen.getByRole("button", { name: "Reopen" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Edit" }).length).toBeGreaterThan(0);
   });
@@ -348,7 +350,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
 
     render(<AdminAvailabilityPage />);
-    await screen.findAllByText("Feb–Mar 2026");
+    await screen.findAllByText("Sep–Oct 2026");
 
     const reopenBtn = screen.getByRole("button", { name: "Reopen" });
     await userEvent.setup().click(reopenBtn);
@@ -383,7 +385,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
 
     render(<AdminAvailabilityPage />);
-    await screen.findAllByText("Feb–Mar 2026");
+    await screen.findAllByText("Sep–Oct 2026");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Reopen" }));
 
@@ -424,7 +426,7 @@ describe("AdminAvailabilityPage — Reopen button", () => {
     vi.stubGlobal("confirm", vi.fn(() => false));
 
     render(<AdminAvailabilityPage />);
-    await screen.findAllByText("Feb–Mar 2026");
+    await screen.findAllByText("Sep–Oct 2026");
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Reopen" }));
 

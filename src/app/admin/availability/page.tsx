@@ -444,15 +444,15 @@ export default function AdminAvailabilityPage() {
                       </p>
                       <p className="text-xs text-gray-400">responded</p>
                     </div>
-                    {/* Deadline — hide overdue/due label once all members have responded */}
+                    {/* Deadline — hide overdue/due label for past periods and once all responded */}
                     {period.deadline && (
                       <div>
-                        {!allResponded && <p className={`text-xs font-medium ${dl?.color ?? "text-gray-500"}`}>{dl?.label}</p>}
+                        {!isPast && !allResponded && <p className={`text-xs font-medium ${dl?.color ?? "text-gray-500"}`}>{dl?.label}</p>}
                         <p className="text-xs text-gray-400">{formatDate(period.deadline)}</p>
                       </div>
                     )}
                     {/* Actions — stopPropagation so clicking buttons doesn't navigate */}
-                    {canEdit && (
+                    {canEdit && !isPast && (
                       <div
                         className="flex items-center gap-1 pl-2 border-l border-gray-200"
                         onClick={(e) => e.stopPropagation()}
