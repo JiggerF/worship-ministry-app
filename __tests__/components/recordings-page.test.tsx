@@ -12,21 +12,22 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminRecordingsPage from "@/app/admin/recordings/page";
+import { withPermissions } from "../helpers/mockPermissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_MEMBER = {
+const ADMIN_MEMBER = withPermissions({
   id: "admin-1",
   name: "Test Admin",
   email: "admin@wcc.org",
   app_role: "Admin",
   is_active: true,
-};
+});
 
-const COORDINATOR_MEMBER = { ...ADMIN_MEMBER, id: "coord-1", app_role: "Coordinator" };
-const MUSICIAN_MEMBER = { ...ADMIN_MEMBER, id: "mus-1", app_role: "Musician" };
+const COORDINATOR_MEMBER = withPermissions({ ...ADMIN_MEMBER, id: "coord-1", app_role: "Coordinator" });
+const MUSICIAN_MEMBER = withPermissions({ ...ADMIN_MEMBER, id: "mus-1", app_role: "Musician" });
 
 const MOCK_RECORDINGS = [
   {

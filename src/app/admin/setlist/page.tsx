@@ -50,8 +50,11 @@ function displayYoutubeUrl(row: SetlistSongWithDetails): string | null {
 // Current member hook
 // ─────────────────────────────────────────────
 
+import type { Permissions } from "@/lib/permissions";
+
 function useCurrentMember() {
   const [member, setMember] = useState<MemberWithRoles | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +63,7 @@ function useCurrentMember() {
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
@@ -68,7 +72,7 @@ function useCurrentMember() {
       });
     return () => { cancelled = true; };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 // ─────────────────────────────────────────────
@@ -466,7 +470,7 @@ export default function AdminSetlistPage() {
   const [selectedDate, setSelectedDate] = useState<string>(upcomingSundays[0] ?? "");
 
   // ── Current user ─────────────────────────────
-  const { member: currentMember, loading: memberLoading } = useCurrentMember();
+  const { member: currentMember, permissions, loading: memberLoading } = useCurrentMember();
 
   // ── Setlist ──────────────────────────────────
   const [setlistRows, setSetlistRows] = useState<SetlistSongWithDetails[]>([]);
@@ -944,19 +948,14 @@ export default function AdminSetlistPage() {
   // worship lead for this Sunday. Admin and Coordinator always have edit access.
   // Default to false (restrictive) while loading.
   // ─────────────────────────────────────────────
-  const isWorshipLeadRole =
-    currentMember?.app_role === "WorshipLeader" ||
-    currentMember?.app_role === "MusicCoordinator";
+  const hasSetlistWrite = !!permissions?.setlist?.includes("write");
 
-  // canManageSetlist: role-based check only — used for Publish / Revert buttons
-  // which must remain accessible even when the setlist is published.
+  // canManageSetlist: full setlist write permission, OR the assigned worship lead for this Sunday
   const canManageSetlist =
     !memberLoading &&
     currentMember !== null &&
-    (currentMember.app_role === "Admin" ||
-      currentMember.app_role === "Coordinator" ||
-      (isWorshipLeadRole &&
-        currentMember.id === worshipLeadMemberId));
+    (hasSetlistWrite ||
+      currentMember.id === worshipLeadMemberId);
 
   // canEdit: also requires the setlist to NOT be published — prevents accidental
   // edits to a finalised/published setlist; user must Revert to Draft first.
@@ -964,7 +963,8 @@ export default function AdminSetlistPage() {
 
   const isViewOnlyWL =
     !memberLoading &&
-    isWorshipLeadRole &&
+    currentMember !== null &&
+    !hasSetlistWrite &&
     !canManageSetlist;
 
   // ─────────────────────────────────────────────

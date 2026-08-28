@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import { getTenantId } from "@/lib/server/tenant";
 import { getMembers, createMember } from "@/lib/db/members";
 
@@ -17,7 +19,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   // Validate server-side via actor — never trust client-sent x-app-role header
   const actor = await getActorFromRequest(req);
-  if (!actor || actor.role === "Coordinator") {
+  if (!actor || !hasPermission(actor.role as AppRole, "people", "write")) {
     return NextResponse.json({ error: "Not authorized to create members" }, { status: 403 });
   }
 

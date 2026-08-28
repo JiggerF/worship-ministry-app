@@ -8,8 +8,11 @@ import { RosterBadge } from "@/components/status-badge";
 import makeDevRoster from "@/lib/mocks/devRoster";
 import type { MemberRole, RosterStatus, SundayRoster, MemberWithRoles, RosterAssignmentWithDetails } from "@/lib/types/database";
 
+import type { Permissions } from "@/lib/permissions";
+
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -18,13 +21,14 @@ function useCurrentMember() {
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 interface ApiAssignment {
@@ -74,14 +78,14 @@ function monthToNumber(yearMonth: string) {
 }
 
 export default function AdminRosterPage() {
-  const { member, loading: memberLoading } = useCurrentMember();
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
   const router = useRouter();
   const routerRef = useRef(router);
   useEffect(() => { routerRef.current = router; }, [router]);
-  // Only Admin and Coordinator can edit the roster grid.
+  // Only roles with roster write permission can edit the roster grid.
   // Default to false (restrictive) while loading to prevent flash of edit controls.
   const canEditRoster = !memberLoading && member !== null &&
-    (member.app_role === "Admin" || member.app_role === "Coordinator");
+    !!permissions?.roster?.includes("write");
 
   const [activeMonth, setActiveMonth] = useState(getCurrentMonth);
   const [roster, setRoster] = useState<SundayRoster[]>([]);

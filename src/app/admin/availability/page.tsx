@@ -9,8 +9,11 @@ type PeriodWithCounts = AvailabilityPeriod & {
   total_musicians: number;
 };
 
+import type { Permissions } from "@/lib/permissions";
+
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -19,13 +22,14 @@ function useCurrentMember() {
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 function formatDate(iso: string) {
@@ -75,12 +79,10 @@ function deadlineStatus(deadline: string | null): { label: string; color: string
 }
 
 export default function AdminAvailabilityPage() {
-  const { member, loading: memberLoading } = useCurrentMember();
-  const BLOCKED_ROLES = ["WorshipLeader", "MusicCoordinator"];
-  const isBlocked = !memberLoading && member !== null && BLOCKED_ROLES.includes(member.app_role);
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
   const canEdit = !memberLoading && member !== null &&
-    member.app_role !== "WorshipLeader" &&
-    member.app_role !== "MusicCoordinator";
+    !!permissions?.availability?.includes("write");
+  const isBlocked = !memberLoading && member !== null && !canEdit;
 
   const router = useRouter();
 

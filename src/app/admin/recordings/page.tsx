@@ -6,18 +6,21 @@ import { ROLE_LABEL_MAP } from "@/lib/constants/roles";
 import type { MemberRole } from "@/lib/types/database";
 import { formatDuration } from "@/lib/utils/recordings";
 
+import type { Permissions } from "@/lib/permissions";
+
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/me", { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (!cancelled) { setMember(data ?? null); setLoading(false); } })
+      .then((data) => { if (!cancelled) { setMember(data ?? null); setPermissions(data?.permissions ?? null); setLoading(false); } })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 function formatDate(iso: string) {
@@ -61,9 +64,9 @@ function secondsToMMSS(s: number | null): string {
 }
 
 export default function AdminRecordingsPage() {
-  const { member, loading: memberLoading } = useCurrentMember();
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
   const canUpload = !memberLoading && member !== null &&
-    (member.app_role === "Admin" || member.app_role === "Coordinator");
+    !!permissions?.recordings?.includes("write");
 
   const [recordings, setRecordings] = useState<SundayRecordingWithTeam[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);

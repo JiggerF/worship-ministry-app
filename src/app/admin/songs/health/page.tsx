@@ -2,9 +2,11 @@
 import { useMemo, useState, useEffect } from "react";
 import type { SongWithCharts } from "@/lib/types/database";
 import { Card } from "@/components/ui/Card";
+import type { Permissions } from "@/lib/permissions";
 
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -13,6 +15,7 @@ function useCurrentMember() {
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
@@ -23,7 +26,7 @@ function useCurrentMember() {
       cancelled = true;
     };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 interface HealthMetrics {
@@ -43,9 +46,9 @@ function computeHealth(song: SongWithCharts): HealthMetrics {
 }
 
 export default function SongHealthPage() {
-  const { member, loading: memberLoading } = useCurrentMember();
-  // All admin roles (Admin, Coordinator, MusicCoordinator, WorshipLeader) can edit on Song Health
-  const canEditSong = !memberLoading && member !== null;
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
+  const canEditSong = !memberLoading && member !== null &&
+    !!permissions?.songs?.includes("write");
 
   const [songs, setSongs] = useState<SongWithCharts[]>([]);
   const [showIncompleteOnly, setShowIncompleteOnly] = useState(true);

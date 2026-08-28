@@ -17,6 +17,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminSetlistPage from "@/app/admin/setlist/page";
+import { withPermissions } from "../helpers/mockPermissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dynamic date anchor
@@ -49,7 +50,7 @@ const ROSTER_MONTH = SUNDAY_DATE.slice(0, 7);
 // Member fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const makeMe = (override: object) => ({
+const makeMe = (override: object) => withPermissions({
   id: "member-1",
   name: "Test User",
   email: "test@wcc.org",

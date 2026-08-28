@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import {
   createPeriod,
   listPeriodsWithCounts,
@@ -13,14 +15,14 @@ function rangesOverlap(a0: string, a1: string, b0: string, b1: string) {
 /**
  * GET /api/availability/periods
  * Returns all periods, most recent first.
- * Requires Admin or Coordinator.
+ * Requires availability view permission.
  */
 export async function GET(req: NextRequest) {
   const actor = await getActorFromRequest(req);
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "view")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -45,7 +47,7 @@ export async function POST(req: NextRequest) {
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role !== "Admin" && actor.role !== "Coordinator") {
+  if (!hasPermission(actor.role as AppRole, "availability", "write")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

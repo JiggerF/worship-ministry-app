@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import { updateMember, deleteMember } from "@/lib/db/members";
 
 export async function PUT(req: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -7,8 +9,8 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role === "Coordinator") {
-    return NextResponse.json({ error: "Coordinator cannot update members" }, { status: 403 });
+  if (!hasPermission(actor.role as AppRole, "people", "write")) {
+    return NextResponse.json({ error: "Not authorized to update members" }, { status: 403 });
   }
 
   const id = (await context.params).id;
@@ -37,8 +39,8 @@ export async function DELETE(req: NextRequest, context: { params: Promise<{ id: 
   if (!actor) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (actor.role !== "Admin") {
-    return NextResponse.json({ error: "Only Admin can delete members" }, { status: 403 });
+  if (!hasPermission(actor.role as AppRole, "people", "delete")) {
+    return NextResponse.json({ error: "Not authorized to delete members" }, { status: 403 });
   }
 
   const id = (await context.params).id;

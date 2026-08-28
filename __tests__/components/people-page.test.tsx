@@ -10,12 +10,13 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminPeoplePage from "@/app/admin/people/page";
+import { withPermissions } from "../helpers/mockPermissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_MEMBER = {
+const ADMIN_MEMBER = withPermissions({
   id: "admin-1",
   name: "Test Admin",
   email: "admin@wcc.org",
@@ -25,16 +26,16 @@ const ADMIN_MEMBER = {
   is_active: true,
   created_at: "2026-01-01T00:00:00Z",
   roles: [],
-};
+});
 
-const COORDINATOR_MEMBER = {
+const COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "coord-1",
   name: "Test Coordinator",
   email: "coord@wcc.org",
   app_role: "Coordinator",
   magic_token: "token-xyz",
-};
+});
 
 const EXISTING_MEMBER = {
   ...ADMIN_MEMBER,

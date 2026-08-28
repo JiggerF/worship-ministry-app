@@ -13,42 +13,43 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminSongsPage from "@/app/admin/songs/page";
+import { withPermissions } from "../helpers/mockPermissions";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_MEMBER = {
+const ADMIN_MEMBER = withPermissions({
   id: "admin-1",
   name: "Test Admin",
   email: "admin@wcc.org",
   app_role: "Admin",
   is_active: true,
-};
+});
 
-const MUSIC_COORDINATOR_MEMBER = {
+const MUSIC_COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "mc-1",
   name: "Music Coordinator",
   email: "mc@wcc.org",
   app_role: "MusicCoordinator",
-};
+});
 
-const WORSHIP_LEADER_MEMBER = {
+const WORSHIP_LEADER_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "wl-1",
   name: "Worship Leader",
   email: "wl@wcc.org",
   app_role: "WorshipLeader",
-};
+});
 
-const COORDINATOR_MEMBER = {
+const COORDINATOR_MEMBER = withPermissions({
   ...ADMIN_MEMBER,
   id: "coord-1",
   name: "Coordinator",
   email: "coord@wcc.org",
   app_role: "Coordinator",
-};
+});
 
 const MOCK_SONGS = [
   {

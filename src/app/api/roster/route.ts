@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createAuditLogEntry } from "@/lib/db/audit-log";
 import { getActorFromRequest } from "@/lib/server/get-actor";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 import { getTenantId } from "@/lib/server/tenant";
 
 const supabaseUrl =
@@ -125,7 +127,7 @@ export async function GET(req: NextRequest) {
     const canSeeDraft =
       !isPortalView &&
       actor !== null &&
-      (actor.role === "Admin" || actor.role === "Coordinator");
+      hasPermission(actor.role as AppRole, "roster", "write");
 
     let query = supabase
       .from("roster")

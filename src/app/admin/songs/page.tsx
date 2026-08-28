@@ -4,8 +4,11 @@ import { Suspense } from "react";
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 
+import type { Permissions } from "@/lib/permissions";
+
 function useCurrentMember() {
   const [member, setMember] = useState<{ app_role: string } | null>(null);
+  const [permissions, setPermissions] = useState<Permissions | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -14,13 +17,14 @@ function useCurrentMember() {
       .then((data) => {
         if (!cancelled) {
           setMember(data ?? null);
+          setPermissions(data?.permissions ?? null);
           setLoading(false);
         }
       })
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, []);
-  return { member, loading };
+  return { member, permissions, loading };
 }
 
 import { MOCK_SONGS } from "@/lib/mocks/mockSongs";
@@ -64,13 +68,13 @@ const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_ROSTER === "true";
 
 function SongsPageContent() {
   const searchParams = useSearchParams();
-  const { member, loading: memberLoading } = useCurrentMember();
-  // canEditSong: can edit existing songs (Admin + Coordinator + MusicCoordinator + WorshipLeader)
-  const canEditSong = !memberLoading && member !== null;
-  // canAddDeleteSong: can add new or delete songs (Admin + Coordinator)
+  const { member, permissions, loading: memberLoading } = useCurrentMember();
+  // canEditSong: can edit existing songs
+  const canEditSong = !memberLoading && member !== null &&
+    !!permissions?.songs?.includes("write");
+  // canAddDeleteSong: can add new or delete songs
   const canAddDeleteSong = !memberLoading && member !== null &&
-    member.app_role !== "WorshipLeader" &&
-    member.app_role !== "MusicCoordinator";
+    !!permissions?.songs?.includes("delete");
   const initial = IS_MOCK ? MOCK_SONGS : ([] as SongWithCharts[]);
 
   const [songs, setSongs] = useState<SongWithCharts[]>(initial);
