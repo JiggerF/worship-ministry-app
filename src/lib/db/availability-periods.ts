@@ -78,6 +78,23 @@ export async function listPeriodsWithCounts(tenantId: string): Promise<
   if (periodsError) throw periodsError;
   if (!periods?.length) return [];
 
+  // Auto-close any open periods whose date range has fully passed
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const expiredIds = periods
+    .filter((p) => !p.closed_at && p.ends_on < todayIso)
+    .map((p) => p.id);
+  if (expiredIds.length > 0) {
+    await supabase
+      .from("availability_periods")
+      .update({ closed_at: new Date().toISOString() })
+      .in("id", expiredIds)
+      .eq("tenant_id", tenantId);
+    const now = new Date().toISOString();
+    for (const p of periods) {
+      if (expiredIds.includes(p.id)) p.closed_at = now;
+    }
+  }
+
   // Count responses per period in one query
   const { data: responseCounts, error: countError } = await supabase
     .from("availability_responses")
