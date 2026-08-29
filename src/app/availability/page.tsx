@@ -45,7 +45,7 @@ function toISODate(date: Date): string {
 }
 
 export default function AvailabilityPage() {
-  const { member: currentUser, loading: memberLoading } = useCurrentMember();
+  const { member: currentUser, permissions, loading: memberLoading } = useCurrentMember();
 
   const token = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") : null;
   const periodId = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("period") : null;
@@ -65,6 +65,12 @@ export default function AvailabilityPage() {
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  function showToast(message: string, type: "success" | "error" = "success") {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }
   const [isLockedOut, setIsLockedOut] = useState(false);
   const [periodLabel, setPeriodLabel] = useState<string | null>(null);
   // Sundays driven by API when in period mode; computed from targetMonth otherwise
@@ -180,8 +186,10 @@ export default function AvailabilityPage() {
     load();
   }, [token, targetMonth, sundays, periodId]);
 
-  // Hide page for Worship Lead and Music Coordinator
-  if (!memberLoading && currentUser && ["WorshipLeader", "MusicCoordinator"].includes(currentUser.app_role)) {
+  // Hide page for roles without availability view permission.
+  // Only enforce when we have a confirmed identity — if /api/me fails, allow the token path.
+  const hasLoadedRole = !memberLoading && currentUser !== null;
+  if (hasLoadedRole && !permissions?.availability?.includes("view")) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4">
         <div className="max-w-md w-full bg-white rounded-xl border border-gray-200 p-6 text-center">
@@ -203,16 +211,15 @@ export default function AvailabilityPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!token) return;
+    if (!token || submitting) return;
 
     if (preferredRoleId === "") {
-      alert("Please select your primary role.");
+      showToast("Please select your primary role.", "error");
       return;
     }
 
-    // NOTE: you previously required at least 1 date. Keep or remove as desired.
     if (selectedDates.size === 0) {
-      alert("Please select at least one available date.");
+      showToast("Please select at least one available date.", "error");
       return;
     }
 
@@ -220,25 +227,34 @@ export default function AvailabilityPage() {
       ? `periodId=${periodId}`
       : `targetMonth=${targetMonth}`;
 
-    const res = await fetch(
-      `/api/availability/${token}?${queryParam}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          preferred_role_id: preferredRoleId == null ? null : preferredRoleId,
-          available_dates: Array.from(selectedDates),
-          notes: notes.trim() === "" ? null : notes.trim(),
-        }),
-      });
+    setSubmitting(true);
+    try {
+      const res = await fetch(
+        `/api/availability/${token}?${queryParam}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preferred_role_id: preferredRoleId == null ? null : preferredRoleId,
+            available_dates: Array.from(selectedDates),
+            notes: notes.trim() === "" ? null : notes.trim(),
+          }),
+        });
 
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      alert(json.error || "Submission failed");
-      return;
+      let json: { error?: string } | null = null;
+      try { json = await res.json(); } catch { /* ignore */ }
+      if (!res.ok) {
+        showToast(json?.error || "Submission failed", "error");
+        return;
+      }
+
+      setSubmitted(true);
+    } catch (err) {
+      console.error("handleSubmit error:", err);
+      showToast("An unexpected error occurred", "error");
+    } finally {
+      setSubmitting(false);
     }
-
-    setSubmitted(true);
   }
 
   if (loading) {
@@ -395,13 +411,21 @@ export default function AvailabilityPage() {
           {/* Submit */}
           <button
             type="submit"
-            className="w-full py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold transition-colors"
+            disabled={submitting}
+            className="w-full py-3 rounded-lg bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Submit Availability
+            {submitting ? "Submitting..." : "Submit Availability"}
           </button>
         </form>
         </div>
       </div>
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-medium ${
+          toast.type === "error" ? "bg-red-600 text-white" : "bg-gray-900 text-white"
+        }`}>
+          {toast.message}
+        </div>
+      )}
     </Suspense>
   );
 }

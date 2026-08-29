@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { MeResponse } from "@/lib/types/database";
+import type { Resource } from "@/lib/permissions";
 
 function useCurrentMember() {
   const [member, setMember] = useState<MeResponse | null>(null);
@@ -57,25 +58,33 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { href: "/admin/about", label: "About", icon: "ℹ️" },
 ];
 
-// Pages hidden for Coordinator, WorshipLeader, and MusicCoordinator
-const RESTRICTED_NAV_HIDDEN = ["/admin/settings", "/admin/audit"];
-const RESTRICTED_ROLES = ["Coordinator", "WorshipLeader", "MusicCoordinator"] as const;
+// Map sidebar hrefs to the permission resource required to view them.
+// Pages not listed here are visible to all authenticated admin roles.
+const NAV_PERMISSION_RESOURCE: Record<string, Resource> = {
+  "/admin/settings": "settings",
+  "/admin/audit": "audit",
+};
 
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { member, loading: memberLoading } = useCurrentMember();
+  const permissions = member?.permissions ?? null;
 
   // Don't show sidebar on login page
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
 
-  // Show restricted nav items (Settings, Audit Log) only once the role is
-  // confirmed as non-restricted. While loading or on fetch failure, default to
-  // hiding them — never flash privileged links to restricted users.
-  const showAll = !memberLoading && member !== null && !RESTRICTED_ROLES.includes(member.app_role as typeof RESTRICTED_ROLES[number]);
+  // Permission-based nav visibility. While loading or on fetch failure, default
+  // to hiding restricted items — never flash privileged links.
+  const isNavAllowed = (href: string): boolean => {
+    const resource = NAV_PERMISSION_RESOURCE[href];
+    if (!resource) return true; // no permission gate on this nav item
+    if (memberLoading || !permissions) return false; // hide while unknown
+    return permissions[resource]?.includes("view") ?? false;
+  };
 
   // Feature flag filtering: if features[] is absent (single-tenant / not loaded),
   // default to showing all items. This preserves backward compatibility with tests
@@ -90,8 +99,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const filteredSidebar = SIDEBAR_ITEMS.filter((item) => {
     // 1. Feature-flag gate
     if (!isFeatureVisible(item.feature)) return false;
-    // 2. Role-based gate (Settings / Audit Log hidden for restricted roles)
-    if (!showAll && RESTRICTED_NAV_HIDDEN.includes(item.href)) return false;
+    // 2. Permission-based gate (e.g. Settings / Audit Log)
+    if (!isNavAllowed(item.href)) return false;
     return true;
   });
 

@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
 import { getTenantId } from "@/lib/server/tenant";
 import type { AppRole } from "@/lib/types/database";
+import { hasPermission } from "@/lib/permissions";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -97,7 +98,7 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json({ error: "Member not found" }, { status: 403 });
   }
 
-  if (member.app_role !== "Admin") {
+  if (!hasPermission(member.app_role as AppRole, "settings", "write")) {
     return NextResponse.json({ error: "Forbidden — only Admins can change permissions" }, { status: 403 });
   }
 

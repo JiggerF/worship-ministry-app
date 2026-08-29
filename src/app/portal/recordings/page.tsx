@@ -69,11 +69,18 @@ export default function PortalTrackPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
+  // Read ?org= from the portal URL so API calls carry tenant context in dev.
+  // In production (subdomain routing), ?org= is not needed — the subdomain resolves the tenant.
+  const [orgSlug] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("org");
+  });
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const res = await fetch("/api/recordings");
+        const res = await fetch(`/api/recordings${orgSlug ? `?org=${encodeURIComponent(orgSlug)}` : ""}`);
         if (!res.ok) {
           let msg = `Failed to load recordings (${res.status})`;
           try { const j = await res.json(); msg = j.error ?? msg; } catch { /* ignore */ }

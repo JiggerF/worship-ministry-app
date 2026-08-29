@@ -3,6 +3,8 @@ import { createServerClient } from "@supabase/ssr";
 import { getMemberByEmail } from "@/lib/db/members";
 import { restoreVersion, getHandbookEditorConfig } from "@/lib/db/handbook";
 import { getTenantId } from "@/lib/server/tenant";
+import { hasPermission } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 
 /** Resolve caller email from session cookies (mirrors /api/me + /api/handbook/[slug]). */
 async function resolveEmail(req: NextRequest): Promise<string | null> {
@@ -62,7 +64,9 @@ export async function POST(
   }
 
   const { editorRoles, editorMemberIds } = await getHandbookEditorConfig(tenantId);
-  if (!editorRoles.includes(member.app_role as import("@/lib/types/database").AppRole) && !editorMemberIds.includes(member.id)) {
+  const allowedByPermissionMap = hasPermission(member.app_role as AppRole, "handbook", "write");
+  const allowedByEditorConfig = editorRoles.includes(member.app_role as AppRole) || editorMemberIds.includes(member.id);
+  if (!allowedByPermissionMap && !allowedByEditorConfig) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

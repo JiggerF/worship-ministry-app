@@ -2,6 +2,8 @@
 // DATABASE TYPES — MUST MATCH SUPABASE SCHEMA EXACTLY
 // =====================================================
 
+import type { Permissions } from "@/lib/permissions";
+
 // ─────────────────────────────────────────────
 // ENUMS
 // ─────────────────────────────────────────────
@@ -227,7 +229,7 @@ export interface MeResponse extends Omit<Member, "app_role"> {
    * Shape: { resource: ["view", "write", "delete"] }
    * Clients should use this instead of deriving permissions from app_role.
    */
-  permissions: Record<string, string[]>;
+  permissions: Permissions;
 }
 
 // ─────────────────────────────────────────────
