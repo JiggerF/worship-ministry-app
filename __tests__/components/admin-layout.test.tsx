@@ -9,6 +9,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { usePathname } from "next/navigation";
 import AdminLayout from "@/app/admin/layout";
+import { getPermissionsForRole } from "@/lib/permissions";
+import type { AppRole } from "@/lib/types/database";
 
 // ── Mock next/navigation ──────────────────────────────────────────────────────
 vi.mock("next/navigation", () => ({
@@ -39,11 +41,12 @@ vi.mock("next/link", () => ({
 
 /** Stubs global fetch to return the given member from /api/me */
 function setupMember(app_role: string) {
+  const permissions = getPermissionsForRole(app_role as AppRole);
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ id: "member-1", name: "Test User", app_role }),
+      json: async () => ({ id: "member-1", name: "Test User", app_role, permissions }),
     })
   );
 }
@@ -136,6 +139,30 @@ describe("AdminLayout — Coordinator nav", () => {
   });
 });
 
+describe("AdminLayout — WorshipLeader nav", () => {
+  it("does not show Settings or Audit Log for WorshipLeader", async () => {
+    setupMember("WorshipLeader");
+    renderLayout();
+    const nav = await screen.findByTestId("sidebar-nav");
+    await waitFor(() => {
+      expect(within(nav).queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("AdminLayout — MusicCoordinator nav", () => {
+  it("does not show Settings or Audit Log for MusicCoordinator", async () => {
+    setupMember("MusicCoordinator");
+    renderLayout();
+    const nav = await screen.findByTestId("sidebar-nav");
+    await waitFor(() => {
+      expect(within(nav).queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
+    });
+  });
+});
+
 describe("AdminLayout — loading state", () => {
   it("hides restricted nav links while member is loading (secure default)", () => {
     // Fetch never resolves, so member stays null and loading stays true.
@@ -172,6 +199,7 @@ describe("AdminLayout — feature flag filtering", () => {
           id: "member-1",
           name: "Test User",
           app_role: "Admin",
+          permissions: getPermissionsForRole("Admin"),
           tenant_id: "00000000-0000-0000-0000-000000000001",
           tenant_name: "Test Church",
           // handbook and setlist are NOT in the features list
@@ -197,6 +225,7 @@ describe("AdminLayout — feature flag filtering", () => {
           id: "member-1",
           name: "Test User",
           app_role: "Admin",
+          permissions: getPermissionsForRole("Admin"),
           tenant_id: "00000000-0000-0000-0000-000000000001",
           tenant_name: "Grace Community Church",
           features: ["roster", "songs"],
