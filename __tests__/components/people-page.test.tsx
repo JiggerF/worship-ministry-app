@@ -154,6 +154,61 @@ describe("AdminPeoplePage — Add Member modal", () => {
   });
 });
 
+describe("AdminPeoplePage — Custom Permissions UI", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("does NOT show Custom Permissions toggle in Add Member modal", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER));
+    render(<AdminPeoplePage />);
+
+    await user.click(await screen.findByRole("button", { name: "+ Add Member" }));
+    expect(screen.queryByText("Custom Permissions")).not.toBeInTheDocument();
+  });
+
+  it("shows Custom Permissions toggle in Edit Member modal", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, [EXISTING_MEMBER]));
+    render(<AdminPeoplePage />);
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    expect(screen.getByText("Custom Permissions")).toBeInTheDocument();
+  });
+
+  it("expanding Custom Permissions shows resource rows with checkboxes", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, [EXISTING_MEMBER]));
+    render(<AdminPeoplePage />);
+
+    await user.click(await screen.findByRole("button", { name: "Edit" }));
+    await user.click(screen.getByText("Custom Permissions"));
+
+    // Resource labels should be visible (use getAllByText for "People" since it's also the page heading)
+    expect(screen.getAllByText("People").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("Songs")).toBeInTheDocument();
+    expect(screen.getByText("Roster")).toBeInTheDocument();
+    // Checkboxes should be present
+    const checkboxes = screen.getAllByRole("checkbox");
+    expect(checkboxes.length).toBeGreaterThan(0);
+    // Reset button should be visible
+    expect(screen.getByText("Reset to Defaults")).toBeInTheDocument();
+  });
+
+  it("shows Custom badge on members with permission overrides", async () => {
+    const memberWithOverrides = {
+      ...EXISTING_MEMBER,
+      permission_overrides: { songs: ["view", "write"] },
+    };
+    vi.stubGlobal("fetch", makeFetch(ADMIN_MEMBER, [memberWithOverrides]));
+    render(<AdminPeoplePage />);
+
+    await screen.findByText("John Doe");
+    expect(screen.getByText("Custom")).toBeInTheDocument();
+  });
+});
+
 describe("AdminPeoplePage — Coordinator read-only", () => {
   afterEach(() => {
     vi.restoreAllMocks();

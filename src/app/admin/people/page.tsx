@@ -3,7 +3,8 @@
 import { useState, useEffect } from "react";
 import { ROLES, ROLE_LABEL_MAP } from "@/lib/constants/roles";
 import type { MemberWithRoles, MemberRole, AppRole } from "@/lib/types/database";
-import type { Permissions } from "@/lib/permissions";
+import type { Permissions, Resource, Action } from "@/lib/permissions";
+import { RESOURCES, RESOURCE_LABELS, ALL_ACTIONS, PERMISSION_MAP } from "@/lib/permissions";
 
 // Define MemberFormData type
 interface MemberFormData {
@@ -12,7 +13,18 @@ interface MemberFormData {
   phone: string;
   app_role: AppRole;
   roles: MemberRole[];
+  permission_overrides: Record<string, string[]> | null;
 }
+
+// Resources that admins can override (settings/audit are Admin-only and not overridable)
+const OVERRIDABLE_RESOURCES: Resource[] = RESOURCES.filter(
+  (r) => r !== "settings" && r !== "audit"
+);
+
+// Actions that don't exist for certain resources (no UI/API for them)
+const DISABLED_ACTIONS: Partial<Record<Resource, Action[]>> = {
+  health: ["delete"],
+};
 
 function useCurrentMember() {
   const [member, setMember] = useState<MemberWithRoles | null>(null);
@@ -73,6 +85,7 @@ export default function AdminPeoplePage() {
 
   const [showModal, setShowModal] = useState(false);
   const [editingMember, setEditingMember] = useState<MemberWithRoles | null>(null);
+  const [showCustomPerms, setShowCustomPerms] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
@@ -83,6 +96,7 @@ export default function AdminPeoplePage() {
     phone: "",
     app_role: "Musician",
     roles: [],
+    permission_overrides: null,
   });
 
   const [sortField, setSortField] = useState<"name" | "email" | "roles" | "status">("name");
@@ -101,7 +115,8 @@ export default function AdminPeoplePage() {
     if (!canEdit) return;
     setEditingMember(null);
     setSaveError(null);
-    setForm({ name: "", email: "", phone: "", app_role: "Musician", roles: [] });
+    setForm({ name: "", email: "", phone: "", app_role: "Musician", roles: [], permission_overrides: null });
+    setShowCustomPerms(false);
     setShowModal(true);
   }
 
@@ -115,8 +130,41 @@ export default function AdminPeoplePage() {
       phone: member.phone || "",
       app_role: member.app_role,
       roles: member.roles,
+      permission_overrides: member.permission_overrides ?? null,
     });
+    setShowCustomPerms(false);
     setShowModal(true);
+  }
+
+  /** Toggle a specific resource+action in permission_overrides */
+  function togglePermOverride(resource: Resource, action: Action) {
+    setForm((prev) => {
+      const roleDefaults = PERMISSION_MAP[prev.app_role] ?? {};
+      const currentOverrides = prev.permission_overrides ?? {};
+      const currentActions = currentOverrides[resource] ?? roleDefaults[resource] ?? [];
+      const removing = currentActions.includes(action);
+      let newActions = removing
+        ? currentActions.filter((a) => a !== action)
+        : [...currentActions, action];
+
+      if (action === "view" && removing) {
+        // Removing view → also remove write and delete (can't edit what you can't see)
+        newActions = [];
+      } else if ((action === "write" || action === "delete") && !removing) {
+        // Adding write or delete → ensure view is also enabled
+        if (!newActions.includes("view")) {
+          newActions = ["view", ...newActions];
+        }
+      }
+
+      return {
+        ...prev,
+        permission_overrides: {
+          ...currentOverrides,
+          [resource]: newActions,
+        },
+      };
+    });
   }
 
   function toggleRole(role: MemberRole) {
@@ -135,12 +183,30 @@ export default function AdminPeoplePage() {
     setSaveError(null);
 
     try {
+      // Compute override diff: only store entries that differ from role defaults.
+      // If no differences, send null to clear overrides.
+      let overridesToSave: Record<string, string[]> | null = null;
+      if (form.permission_overrides && Object.keys(form.permission_overrides).length > 0) {
+        const roleDefaults = PERMISSION_MAP[form.app_role] ?? {};
+        const diff: Record<string, string[]> = {};
+        for (const [resource, actions] of Object.entries(form.permission_overrides)) {
+          const defaultActions = roleDefaults[resource as Resource] ?? [];
+          const sortedOverride = [...actions].sort();
+          const sortedDefault = [...defaultActions].sort();
+          if (sortedOverride.join(",") !== sortedDefault.join(",")) {
+            diff[resource] = actions;
+          }
+        }
+        if (Object.keys(diff).length > 0) overridesToSave = diff;
+      }
+
       const body = {
         name: form.name,
         email: form.email,
         phone: form.phone || null,
         app_role: form.app_role,
         roles: form.roles,
+        ...(editingMember ? { permission_overrides: overridesToSave } : {}),
       };
 
       if (editingMember) {
@@ -333,6 +399,11 @@ export default function AdminPeoplePage() {
                       Music Coordinator
                     </span>
                   )}
+                  {member.permission_overrides && Object.keys(member.permission_overrides).length > 0 && (
+                    <span className="ml-1 inline-flex px-1.5 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                      Custom
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{member.email}</td>
                 <td className="px-4 py-3">
@@ -410,8 +481,8 @@ export default function AdminPeoplePage() {
 
       {/* Add / Edit Modal */}
       {showModal && canEdit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-[560px] max-w-full border border-gray-200 shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 overflow-y-auto p-4">
+          <div className="bg-white rounded-xl p-6 w-[560px] max-w-full max-h-[90vh] overflow-y-auto border border-gray-200 shadow-xl">
             <h2 className="text-lg font-semibold mb-4 text-gray-900">
               {editingMember ? "Edit Member" : "Add Member"}
             </h2>
@@ -467,6 +538,78 @@ export default function AdminPeoplePage() {
                   <option value="Admin">Admin</option>
                 </select>
               </div>
+              {/* Custom Permissions — only in edit mode */}
+              {editingMember && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomPerms((v) => !v)}
+                    className="flex items-center gap-1 text-sm font-medium text-gray-700 hover:text-gray-900"
+                  >
+                    <span className={`transition-transform ${showCustomPerms ? "rotate-90" : ""}`}>▶</span>
+                    Custom Permissions
+                    {!showCustomPerms && form.permission_overrides && Object.keys(form.permission_overrides).length > 0 && (
+                      <span className="ml-1 text-xs text-amber-600">
+                        ({Object.keys(form.permission_overrides).length} override{Object.keys(form.permission_overrides).length !== 1 ? "s" : ""})
+                      </span>
+                    )}
+                  </button>
+                  {showCustomPerms && (
+                    <div className="mt-2 border border-gray-200 rounded-lg p-3">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-gray-500">
+                            <th className="pb-1 font-medium">Resource</th>
+                            {ALL_ACTIONS.map((a) => (
+                              <th key={a} className="pb-1 font-medium text-center w-16">{a}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {OVERRIDABLE_RESOURCES.map((resource) => {
+                            const roleDefaults = PERMISSION_MAP[form.app_role]?.[resource] ?? [];
+                            const overrides = form.permission_overrides;
+                            const hasOverride = overrides != null && resource in overrides;
+                            const effectiveActions = hasOverride ? (overrides[resource] ?? []) : roleDefaults;
+                            return (
+                              <tr key={resource} className="border-t border-gray-100">
+                                <td className="py-1.5 text-gray-700">{RESOURCE_LABELS[resource]}</td>
+                                {ALL_ACTIONS.map((action) => {
+                                  const notApplicable = DISABLED_ACTIONS[resource]?.includes(action);
+                                  if (notApplicable) return <td key={action} className="text-center text-gray-300">—</td>;
+                                  const isDefault = roleDefaults.includes(action);
+                                  const isActive = effectiveActions.includes(action);
+                                  const isOverridden = hasOverride && isActive !== isDefault;
+                                  return (
+                                    <td key={action} className="text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={isActive}
+                                        onChange={() => togglePermOverride(resource, action)}
+                                        className={`rounded ${isOverridden ? "accent-amber-600" : ""}`}
+                                      />
+                                      {isDefault && !hasOverride && (
+                                        <span className="block text-[10px] text-gray-400">default</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <button
+                        type="button"
+                        onClick={() => setForm((prev) => ({ ...prev, permission_overrides: null }))}
+                        className="mt-2 text-xs text-gray-500 hover:text-gray-700 underline"
+                      >
+                        Reset to Defaults
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Worship Roles</label>
                 <div className="flex flex-wrap gap-2">

@@ -171,11 +171,15 @@ describe("AdminLayout — loading state", () => {
     setupMemberLoading();
     renderLayout();
     const nav = screen.getByTestId("sidebar-nav");
-    expect(within(nav).getByRole("link", { name: /roster/i })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
-    // Settings and Audit Log must be hidden until role is confirmed as Admin
+    // All permission-gated nav items must be hidden while loading
+    expect(within(nav).queryByRole("link", { name: /roster/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: /setlist/i })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole("link", { name: /people/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /audit log/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /settings/i })).not.toBeInTheDocument();
+    // Only ungated items (Help, About) remain visible
+    expect(within(nav).getByRole("link", { name: /help/i })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: /about/i })).toBeInTheDocument();
   });
 });
 
@@ -185,9 +189,11 @@ describe("AdminLayout — feature flag filtering", () => {
     setupMember("Admin");
     renderLayout();
     const nav = await screen.findByTestId("sidebar-nav");
-    expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /song manager/i })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(within(nav).getByRole("link", { name: /roster manager/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("link", { name: /song manager/i })).toBeInTheDocument();
+      expect(within(nav).getByRole("link", { name: /setlist/i })).toBeInTheDocument();
+    });
   });
 
   it("hides feature-gated items when that feature is not in features[]", async () => {
