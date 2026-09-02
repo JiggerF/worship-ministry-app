@@ -525,18 +525,38 @@ export default function AdminPeoplePage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">App Role</label>
-                <select
-                  value={form.app_role}
-                  onChange={(e) => setForm((prev) => ({ ...prev, app_role: e.target.value as AppRole }))}
-                  className="w-full border border-gray-300 px-3 py-2 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                >
-                  <option value="Musician">Musician</option>
-                  <option value="WorshipLeader">Worship Lead</option>
-                  <option value="MusicCoordinator">Music Coordinator</option>
-                  <option value="Coordinator">Coordinator</option>
-                  <option value="Admin">Admin</option>
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-2">App Role</label>
+                <div className="space-y-1.5">
+                  {([
+                    { value: "Musician", label: "Musician", desc: "No admin access. Can view portal pages only." },
+                    { value: "WorshipLeader", label: "Worship Lead", desc: "Songs + Song Health write. View-only roster, people, handbook." },
+                    { value: "MusicCoordinator", label: "Music Coordinator", desc: "Songs write. View-only roster, people, setlist, handbook." },
+                    { value: "Coordinator", label: "Coordinator", desc: "Full roster, songs, availability, recordings. View-only people, handbook." },
+                    { value: "Admin", label: "Admin", desc: "Full access to everything including settings and audit." },
+                  ] as const).map((role) => (
+                    <label
+                      key={role.value}
+                      className={`flex items-start gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                        form.app_role === role.value
+                          ? "border-gray-900 bg-gray-50"
+                          : "border-gray-200 hover:border-gray-300"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="app_role"
+                        value={role.value}
+                        checked={form.app_role === role.value}
+                        onChange={(e) => setForm((prev) => ({ ...prev, app_role: e.target.value as AppRole }))}
+                        className="mt-0.5"
+                      />
+                      <div>
+                        <span className="text-sm font-medium text-gray-900">{role.label}</span>
+                        <p className="text-xs text-gray-500 mt-0.5">{role.desc}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
               </div>
               {/* Custom Permissions — only in edit mode */}
               {editingMember && (

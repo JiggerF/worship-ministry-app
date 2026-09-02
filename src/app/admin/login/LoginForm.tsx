@@ -43,16 +43,17 @@ export function AdminLoginForm({ orgName }: AdminLoginFormProps) {
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error ?? "Sign in failed. Please try again.");
+        setLoading(false);
         return;
       }
     } catch {
       setError("Network error. Please check your connection and try again.");
-      return;
-    } finally {
       setLoading(false);
+      return;
     }
 
-    // Ensure middleware + SSR re-evaluate auth state.
+    // Keep spinner visible during navigation — don't setLoading(false) on success.
+    // The page unmounts when navigation completes, so no cleanup needed.
     router.replace("/admin/roster");
     router.refresh();
   }

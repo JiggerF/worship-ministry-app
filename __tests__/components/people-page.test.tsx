@@ -85,11 +85,13 @@ describe("AdminPeoplePage — Add Member modal", () => {
     expect(screen.getByPlaceholderText("email@example.com")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("+61 4XX XXX XXX")).toBeInTheDocument();
 
-    // App role select with all three options
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Musician" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Coordinator" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Admin" })).toBeInTheDocument();
+    // App role radio group — all five roles present
+    const radios = screen.getAllByRole("radio");
+    expect(radios.length).toBe(5);
+    // Spot-check: Musician is selected by default
+    const musicianRadio = radios.find((r) => r.getAttribute("value") === "Musician");
+    expect(musicianRadio).toBeTruthy();
+    expect(musicianRadio).toBeChecked();
 
     // Worship role pills — spot-check first, last, and middle
     expect(screen.getByRole("button", { name: "Worship Lead" })).toBeInTheDocument();
