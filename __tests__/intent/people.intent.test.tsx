@@ -58,7 +58,7 @@ describe("Journey: Admin can manage members", () => {
     expect(screen.getByPlaceholderText("Full name")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("email@example.com")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("+61 4XX XXX XXX")).toBeInTheDocument();
-    expect(screen.getByRole("combobox")).toBeInTheDocument();
+    expect(screen.getAllByRole("radio").length).toBe(5);
     expect(screen.getByRole("button", { name: "Worship Lead" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     const submitBtn = screen.getByRole("button", { name: "Add Member" });
