@@ -30,6 +30,7 @@ export interface MemberPayload {
   magic_token?: string;
   is_active?: boolean;
   roles?: string[];
+  permission_overrides?: Record<string, string[]> | null;
 }
 
 const supabaseUrl =
@@ -193,19 +194,20 @@ export async function getMembers(tenantId: string) {
   // Step 1: obtain the per-tenant role/active state for every member in this org
   const { data: orgMembers, error: orgErr } = await supabase
     .from("organization_members")
-    .select("member_id, app_role, is_active")
+    .select("member_id, app_role, is_active, permission_overrides")
     .eq("organization_id", tenantId);
 
   if (orgErr) throw orgErr;
   if (!orgMembers?.length) return [];
 
-  const memberIds = (orgMembers as { member_id: string; app_role: string; is_active: boolean }[])
-    .map((om) => om.member_id);
+  type OrgMemberRow = { member_id: string; app_role: string; is_active: boolean; permission_overrides: Record<string, string[]> | null };
 
-  const orgRoleMap = new Map<string, { app_role: string; is_active: boolean }>(
-    (orgMembers as { member_id: string; app_role: string; is_active: boolean }[]).map((om) => [
+  const memberIds = (orgMembers as OrgMemberRow[]).map((om) => om.member_id);
+
+  const orgRoleMap = new Map<string, { app_role: string; is_active: boolean; permission_overrides: Record<string, string[]> | null }>(
+    (orgMembers as OrgMemberRow[]).map((om) => [
       om.member_id,
-      { app_role: om.app_role, is_active: om.is_active },
+      { app_role: om.app_role, is_active: om.is_active, permission_overrides: om.permission_overrides },
     ])
   );
 
@@ -222,7 +224,7 @@ export async function getMembers(tenantId: string) {
   if (error) throw error;
 
   return ((data ?? []) as unknown as MemberRow[]).map((row) => {
-    const orgInfo = orgRoleMap.get(row.id) ?? { app_role: "Musician", is_active: false };
+    const orgInfo = orgRoleMap.get(row.id) ?? { app_role: "Musician", is_active: false, permission_overrides: null };
     return {
       id: row.id,
       name: row.name,
@@ -231,6 +233,7 @@ export async function getMembers(tenantId: string) {
       app_role: orgInfo.app_role,    // authoritative per-tenant role
       magic_token: row.magic_token,
       is_active: orgInfo.is_active,  // authoritative per-tenant activation
+      permission_overrides: orgInfo.permission_overrides,
       created_at: row.created_at,
       roles: extractRoles(row),
     };
@@ -280,7 +283,7 @@ export async function getMember(tenantId: string, id: string) {
   // Verify membership
   const { data: orgMember, error: orgErr } = await supabase
     .from("organization_members")
-    .select("app_role, is_active")
+    .select("app_role, is_active, permission_overrides")
     .eq("organization_id", tenantId)
     .eq("member_id", id)
     .maybeSingle();
@@ -299,11 +302,12 @@ export async function getMember(tenantId: string, id: string) {
 
   if (error) throw error;
 
-  const typedOrgMember = orgMember as { app_role: string; is_active: boolean };
+  const typedOrgMember = orgMember as { app_role: string; is_active: boolean; permission_overrides: Record<string, string[]> | null };
   return {
     ...(data as unknown as MemberRow),
     app_role: typedOrgMember.app_role,
     is_active: typedOrgMember.is_active,
+    permission_overrides: typedOrgMember.permission_overrides,
     roles: extractRoles(data as unknown as MemberRow),
   };
 }
@@ -328,7 +332,7 @@ export async function updateMember(
   id: string,
   changes: Partial<MemberPayload>
 ) {
-  const { roles: roleNames, app_role, ...memberData } = changes;
+  const { roles: roleNames, app_role, permission_overrides, ...memberData } = changes;
 
   // Update fields on the global members table (excluding app_role — that lives in org_members)
   if (Object.keys(memberData).length > 0) {
@@ -339,10 +343,11 @@ export async function updateMember(
     if (error) throw error;
   }
 
-  // Update per-tenant role + activation on organization_members
+  // Update per-tenant role + activation + permission overrides on organization_members
   const orgUpdates: Record<string, unknown> = {};
   if (app_role !== undefined) orgUpdates.app_role = app_role;
   if (memberData.is_active !== undefined) orgUpdates.is_active = memberData.is_active;
+  if (permission_overrides !== undefined) orgUpdates.permission_overrides = permission_overrides;
 
   if (Object.keys(orgUpdates).length > 0) {
     const { error: orgErr } = await supabase

@@ -59,8 +59,16 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
 ];
 
 // Map sidebar hrefs to the permission resource required to view them.
-// Pages not listed here are visible to all authenticated admin roles.
+// Pages not listed here (help, about) are visible to all authenticated roles.
 const NAV_PERMISSION_RESOURCE: Record<string, Resource> = {
+  "/admin/roster": "roster",
+  "/admin/availability": "availability",
+  "/admin/setlist": "setlist",
+  "/admin/songs": "songs",
+  "/admin/songs/health": "health",
+  "/admin/people": "people",
+  "/admin/recordings": "recordings",
+  "/admin/handbook": "handbook",
   "/admin/settings": "settings",
   "/admin/audit": "audit",
 };
@@ -199,8 +207,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           )}
         </header>
 
-        {/* Main Content */}
-        <main className="flex-1 p-6 overflow-auto">{children}</main>
+        {/* Main Content — gate by view permission for the current page's resource */}
+        <main className="flex-1 p-6 overflow-auto">
+          {(() => {
+            // Find the most specific matching path (longer match wins, e.g. /admin/songs/health before /admin/songs)
+            const matchedPath = Object.keys(NAV_PERMISSION_RESOURCE)
+              .filter((p) => pathname === p || pathname.startsWith(p + "/"))
+              .sort((a, b) => b.length - a.length)[0];
+            const resource = matchedPath ? NAV_PERMISSION_RESOURCE[matchedPath] : null;
+            if (!resource) return children; // ungated page (help, about, dashboard, login)
+            if (memberLoading) return <div className="flex items-center justify-center h-64"><p className="text-sm text-gray-400">Loading…</p></div>;
+            if (!permissions || !(permissions[resource]?.includes("view"))) {
+              return <div className="flex items-center justify-center h-64"><p className="text-sm text-gray-500">You don&apos;t have permission to view this page.</p></div>;
+            }
+            return children;
+          })()}
+        </main>
       </div>
     </div>
   );

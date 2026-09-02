@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   // Validate chosen_youtube_url if provided — must be https:// URL or null
-  let validatedYoutubeUrl = chosen_youtube_url ?? null;
+  const validatedYoutubeUrl = chosen_youtube_url ?? null;
   if (validatedYoutubeUrl && !validatedYoutubeUrl.startsWith("https://")) {
     return NextResponse.json({ error: "chosen_youtube_url must be a valid https:// URL" }, { status: 400 });
   }

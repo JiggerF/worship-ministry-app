@@ -47,6 +47,8 @@ function computeHealth(song: SongWithCharts): HealthMetrics {
 
 export default function SongHealthPage() {
   const { member, permissions, loading: memberLoading } = useCurrentMember();
+  const canViewHealth = !memberLoading && member !== null &&
+    !!permissions?.health?.includes("view");
   const canEditSong = !memberLoading && member !== null &&
     !!permissions?.songs?.includes("write");
 
@@ -193,6 +195,14 @@ export default function SongHealthPage() {
     } finally {
       setIsSavingUrls(false);
     }
+  }
+
+  if (!memberLoading && !canViewHealth) {
+    return (
+      <div className="min-h-screen p-6 flex items-center justify-center">
+        <p className="text-sm text-gray-500">You don&apos;t have permission to view this page.</p>
+      </div>
+    );
   }
 
   if (loadError) {

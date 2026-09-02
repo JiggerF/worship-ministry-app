@@ -54,7 +54,21 @@ export const RESOURCES: readonly Resource[] = [
   "health",
 ] as const;
 
-const ALL_ACTIONS: Action[] = ["view", "write", "delete"];
+export const ALL_ACTIONS: Action[] = ["view", "write", "delete"];
+
+/** Human-readable labels for each resource (used in the Custom Permissions UI). */
+export const RESOURCE_LABELS: Record<Resource, string> = {
+  people: "People",
+  songs: "Songs",
+  roster: "Roster",
+  setlist: "Setlist",
+  availability: "Availability",
+  recordings: "Recordings",
+  handbook: "Handbook",
+  settings: "Settings",
+  audit: "Audit Log",
+  health: "Song Health",
+};
 
 /**
  * Default permissions per role.
@@ -66,7 +80,7 @@ const ALL_ACTIONS: Action[] = ["view", "write", "delete"];
  * - MusicCoordinator: songs view+write, view-only people/roster/handbook/health/availability/setlist/recordings, no settings/audit
  * - Musician: no admin access
  */
-const PERMISSION_MAP: Record<AppRole, Partial<Record<Resource, Action[]>>> = {
+export const PERMISSION_MAP: Record<AppRole, Partial<Record<Resource, Action[]>>> = {
   Admin: {
     people: ALL_ACTIONS,
     songs: ALL_ACTIONS,

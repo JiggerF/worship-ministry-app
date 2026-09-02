@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getActorFromRequest } from "@/lib/server/get-actor";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, RESOURCES } from "@/lib/permissions";
 import type { AppRole } from "@/lib/types/database";
 import { updateMember, deleteMember } from "@/lib/db/members";
 
@@ -25,6 +25,26 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     if (body.app_role !== undefined) changes.app_role = body.app_role;
     if (body.is_active !== undefined) changes.is_active = body.is_active;
     if (body.roles !== undefined) changes.roles = body.roles;
+    if (body.permission_overrides !== undefined) {
+      // Validate: must be null or Record<Resource, Action[]>
+      const po = body.permission_overrides;
+      if (po !== null) {
+        if (typeof po !== "object" || Array.isArray(po)) {
+          return NextResponse.json({ error: "permission_overrides must be an object or null" }, { status: 400 });
+        }
+        const validActions = ["view", "write", "delete"];
+        const resourceNames = RESOURCES as readonly string[];
+        for (const [key, val] of Object.entries(po)) {
+          if (!resourceNames.includes(key)) {
+            return NextResponse.json({ error: `Invalid resource in permission_overrides: ${key}` }, { status: 400 });
+          }
+          if (!Array.isArray(val) || !val.every((a: unknown) => typeof a === "string" && validActions.includes(a))) {
+            return NextResponse.json({ error: `Invalid actions for resource ${key}` }, { status: 400 });
+          }
+        }
+      }
+      changes.permission_overrides = po;
+    }
 
     const updated = await updateMember(actor.tenantId, id, changes);
     return NextResponse.json(updated);
